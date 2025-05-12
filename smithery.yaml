@@ -2,11 +2,10 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start configuration
+# Start command configuration - follows example exactly
 start:
   command: ["python", "app/mcp_firewall.py"]
   port: 6366
-  healthCheckPath: /health
 
 # Environment variables
 env:
@@ -28,12 +27,3 @@ mcp:
       description: Deletes a firewall rule
     - name: reset_rules
       description: Resets rules to defaults
-
-# Resource limits
-resources:
-  limits:
-    cpu: "0.5"
-    memory: "256Mi"
-  requests:
-    cpu: "0.1"
-    memory: "128Mi"
