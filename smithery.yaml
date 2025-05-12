@@ -2,10 +2,10 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start command configuration - uses simple server for reliability
+# Start command configuration - uses basic server without external dependencies
 startCommand:
   type: http
-  command: ["python", "-u", "app/simple_server.py"]
+  command: ["python", "-u", "app/basic_server.py"]
   port: 6366
 
 # Environment variables
@@ -14,7 +14,7 @@ env:
   PYTHONPATH: "/app"
   LOG_LEVEL: "DEBUG"
 
-# MCP tool configuration - defined statically to avoid scanning issues
+# MCP tool configuration - keeping it minimal for deployment testing
 tools:
   - name: process_text
     description: Process text through the firewall rules engine
@@ -22,6 +22,3 @@ tools:
       text:
         type: string
         description: The text to process
-  - name: get_rules
-    description: Gets all firewall rules
-    parameters: {}

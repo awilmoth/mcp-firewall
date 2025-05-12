@@ -1,19 +1,12 @@
-FROM python:3.11-alpine
+FROM python:3.9-slim
 
 WORKDIR /app
-
-# Install dependencies
-RUN apk add --no-cache curl
 
 # Create app directories
 RUN mkdir -p /app/app/logs /app/app/data
 
-# Copy requirements and install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY app/mcp_firewall.py ./app/
+# Copy application code - using the basic server for simplicity
+COPY app/basic_server.py ./app/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -26,4 +19,4 @@ RUN chmod +x app/mcp_firewall.py
 EXPOSE 6366
 
 # Run the application
-CMD ["python", "-u", "app/mcp_firewall.py"]
+CMD ["python", "-u", "app/basic_server.py"]
