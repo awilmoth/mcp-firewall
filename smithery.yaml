@@ -1,36 +1,17 @@
----
-# Smithery configuration for MCP Firewall
-
+version: 1
 name: mcp-firewall
-version: 1.0.0
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Docker image configuration
-image:
-  name: mcp-firewall
-  dockerfile: Dockerfile
-
-# Deployment configuration
-deploy:
-  replicas: 1
+# Start configuration
+start:
+  command: ["python", "app/mcp_firewall.py"]
   port: 6366
-  health:
-    path: /health
-    initialDelaySeconds: 5
-    periodSeconds: 10
-
-# Service configuration
-service:
-  name: mcp-firewall
-  port: 6366
-  type: ClusterIP
+  healthCheckPath: /health
 
 # Environment variables
 env:
-  - name: PYTHONUNBUFFERED
-    value: "1"
-  - name: PYTHONPATH
-    value: "/app"
+  PYTHONUNBUFFERED: "1"
+  PYTHONPATH: "/app"
 
 # MCP tool configuration
 mcp:
