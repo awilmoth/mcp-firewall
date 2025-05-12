@@ -2,7 +2,7 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start command configuration - follows example exactly
+# Start configuration exactly as in the example
 start:
   command: ["python", "app/mcp_firewall.py"]
   port: 6366
@@ -12,7 +12,7 @@ env:
   PYTHONUNBUFFERED: "1"
   PYTHONPATH: "/app"
 
-# MCP tool configuration
+# MCP tool configuration - this should be fine
 mcp:
   tools:
     - name: process_text
