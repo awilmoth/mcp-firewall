@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "mcp_firewall": {
+      "url": "http://localhost:6366",
+      "transport": "http",
+      "timeout_ms": 60000,
+      "protocol_version": "execute",
+      "tools": [
+        "redact_text",
+        "get_rules",
+        "add_rule",
+        "update_rule",
+        "delete_rule",
+        "reset_rules"
+      ],
+      "description": "MCP Firewall service that redacts sensitive information like SSNs, credit cards, and personal data"
+    }
+  }
+}

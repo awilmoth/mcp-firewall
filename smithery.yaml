@@ -1,0 +1,58 @@
+---
+# Smithery configuration for MCP Firewall
+
+name: mcp-firewall
+version: 1.0.0
+description: MCP Firewall for protecting sensitive information when using LLMs
+
+# Docker image configuration
+image:
+  name: mcp-firewall
+  dockerfile: Dockerfile
+
+# Deployment configuration
+deploy:
+  replicas: 1
+  port: 6366
+  health:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# Service configuration
+service:
+  name: mcp-firewall
+  port: 6366
+  type: ClusterIP
+
+# Environment variables
+env:
+  - name: PYTHONUNBUFFERED
+    value: "1"
+  - name: PYTHONPATH
+    value: "/app"
+
+# MCP tool configuration
+mcp:
+  tools:
+    - name: redact_text
+      description: Redacts sensitive information from text
+    - name: get_rules
+      description: Gets all redaction rules
+    - name: add_rule
+      description: Adds a new redaction rule
+    - name: update_rule
+      description: Updates an existing redaction rule
+    - name: delete_rule
+      description: Deletes a redaction rule
+    - name: reset_rules
+      description: Resets rules to defaults
+
+# Resource limits
+resources:
+  limits:
+    cpu: "0.5"
+    memory: "256Mi"
+  requests:
+    cpu: "0.1"
+    memory: "128Mi"
