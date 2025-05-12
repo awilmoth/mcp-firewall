@@ -278,21 +278,31 @@ def reset_rules_impl() -> Dict:
     save_rules()
     return {"success": True, "message": f"Reset to {len(rules)} default rules"}
 
-# Create FastAPI app and MCP server
-app = FastAPI(title="MCP Firewall",
-              description="Firewall with rules engine for filtering text when using LLMs",
-              version="1.0.0")
+# Create FastAPI app and MCP server with minimal configuration
+try:
+    debug_to_stdio("Creating FastAPI app and MCP server")
+    app = FastAPI(
+        title="MCP Firewall",
+        description="Firewall with rules engine for filtering text when using LLMs",
+        version="1.0.0",
+        # Disable docs to reduce complexity
+        docs_url=None,
+        redoc_url=None
+    )
 
-mcp_server = FastMCP(
-    app=app,
-    metadata={
-        "name": "MCP Firewall",
-        "description": "Firewall with rules engine for filtering text when using LLMs",
-        "version": "1.0.0"
-    }
-)
-
-# Do NOT initialize rules here - we'll do it lazily
+    # Simplified MCP server setup
+    mcp_server = FastMCP(
+        app=app,
+        metadata={
+            "name": "MCP Firewall",
+            "description": "Firewall with rules engine for filtering text when using LLMs",
+            "version": "1.0.0"
+        }
+    )
+    debug_to_stdio("Successfully created FastAPI app and MCP server")
+except Exception as e:
+    debug_to_stdio(f"Error creating FastAPI app or MCP server: {e}")
+    sys.exit(1)  # Exit if we can't even create the server
 
 # Define MCP tools with lazy loading
 @mcp_server.tool()
@@ -481,7 +491,25 @@ async def tools_list():
 @app.get("/health")
 async def health():
     debug_to_stdio("Health check endpoint called")
-    return {"status": "ok", "version": "1.0.0"}
+    # Perform a basic check that rules can be loaded
+    try:
+        ensure_rules_loaded()
+        rule_count = len(rules)
+        return {
+            "status": "ok",
+            "version": "1.0.0",
+            "rule_count": rule_count,
+            "rules_loaded": rules_loaded,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        debug_to_stdio(f"Health check failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "version": "1.0.0",
+            "timestamp": datetime.now().isoformat()
+        }
 
 @app.post("/process", response_model=ProcessResponse)
 async def process_endpoint(text_request: TextRequest):
@@ -545,12 +573,50 @@ def debug_to_stdio(message):
     print(f"DEBUG: {message}", flush=True)
     sys.stdout.flush()
 
+# Ensure rules are loaded on startup for faster response
+def preload_rules():
+    global rules, rules_loaded
+    try:
+        debug_to_stdio("Preloading rules at startup")
+        # Default to an empty list if loading fails
+        rules = []
+
+        if os.path.exists(RULES_FILE):
+            with open(RULES_FILE, 'r') as f:
+                loaded_rules = json.load(f)
+                if loaded_rules:
+                    rules = loaded_rules
+                    debug_to_stdio(f"Successfully preloaded {len(rules)} rules from file")
+                    rules_loaded = True
+                    return
+
+        # If no rules file, use default rules
+        rules = DEFAULT_RULES.copy()
+        debug_to_stdio(f"Preloaded {len(rules)} default rules")
+        rules_loaded = True
+    except Exception as e:
+        debug_to_stdio(f"Error preloading rules: {e}")
+        # Continue with empty rules if there's an error
+        rules = []
+        rules_loaded = True
+
 # Run the server
 if __name__ == "__main__":
     port = 6366
-    logger.info(f"Starting MCP Firewall on port {port}")
-    debug_to_stdio("Starting MCP Firewall with lazy loading of rules")
+    debug_to_stdio(f"Starting MCP Firewall on port {port}")
+
+    # Preload rules to avoid issues with lazy loading
+    preload_rules()
+
     try:
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        # Use different settings for Uvicorn to improve stability
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=port,
+            log_level="info",
+            timeout_keep_alive=120,  # Longer keep-alive
+            workers=1  # Single worker for simplicity
+        )
     except Exception as e:
         debug_to_stdio(f"Error starting server: {e}")
