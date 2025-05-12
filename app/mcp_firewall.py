@@ -168,7 +168,9 @@ def ensure_rules_loaded():
     global rules_loaded
     if not rules_loaded:
         logger.info("Lazy loading rules")
+        debug_to_stdio("Lazy loading rules from file or defaults")
         load_rules()
+        debug_to_stdio(f"Loaded {len(rules)} rules successfully")
 
 def process_text_impl(text: str) -> Dict:
     """Implementation of text processing with firewall rules"""
@@ -394,14 +396,91 @@ def reset_rules() -> Dict:
 # Define API endpoints
 @app.get("/")
 async def root():
+    debug_to_stdio("Root endpoint called")
     return {
         "name": "MCP Firewall",
         "version": "1.0.0",
         "description": "Firewall with rules engine for filtering text when using LLMs"
     }
 
+# Endpoint for Smithery tool scanning
+@app.post("/tools")
+async def tools_list():
+    debug_to_stdio("Tools endpoint called for Smithery scanning")
+    return {
+        "tools": [
+            {
+                "name": "process_text",
+                "description": "Process text through the firewall rules engine",
+                "parameters": {
+                    "text": {
+                        "type": "string",
+                        "description": "The text to process"
+                    }
+                }
+            },
+            {
+                "name": "get_rules",
+                "description": "Gets all firewall rules",
+                "parameters": {}
+            },
+            {
+                "name": "add_rule",
+                "description": "Adds a new firewall rule",
+                "parameters": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the rule"
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "Regex pattern to match"
+                    },
+                    "replacement": {
+                        "type": "string",
+                        "description": "Text to replace matches with"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Description of the rule"
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether the rule is enabled"
+                    }
+                }
+            },
+            {
+                "name": "update_rule",
+                "description": "Updates an existing firewall rule",
+                "parameters": {
+                    "rule_id": {
+                        "type": "string",
+                        "description": "ID of the rule to update"
+                    }
+                }
+            },
+            {
+                "name": "delete_rule",
+                "description": "Deletes a firewall rule",
+                "parameters": {
+                    "rule_id": {
+                        "type": "string",
+                        "description": "ID of the rule to delete"
+                    }
+                }
+            },
+            {
+                "name": "reset_rules",
+                "description": "Resets rules to defaults",
+                "parameters": {}
+            }
+        ]
+    }
+
 @app.get("/health")
 async def health():
+    debug_to_stdio("Health check endpoint called")
     return {"status": "ok", "version": "1.0.0"}
 
 @app.post("/process", response_model=ProcessResponse)
@@ -460,8 +539,18 @@ async def redact_endpoint_legacy(text_request: TextRequest):
         result["redacted_text"] = result.pop("processed_text")
     return result
 
+# Debug function that uses stdio to communicate issues
+def debug_to_stdio(message):
+    """Print debug message to stdout for Smithery to capture"""
+    print(f"DEBUG: {message}", flush=True)
+    sys.stdout.flush()
+
 # Run the server
 if __name__ == "__main__":
     port = 6366
     logger.info(f"Starting MCP Firewall on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    debug_to_stdio("Starting MCP Firewall with lazy loading of rules")
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except Exception as e:
+        debug_to_stdio(f"Error starting server: {e}")
