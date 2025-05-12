@@ -4,11 +4,11 @@ import json
 import requests
 import argparse
 
-def redact_prompt(text, server_url="http://localhost:6366"):
-    """Send a prompt for redaction and return the result"""
+def process_prompt(text, server_url="http://localhost:6366"):
+    """Send a prompt for processing through the firewall and return the result"""
     try:
         response = requests.post(
-            f"{server_url}/redact",
+            f"{server_url}/process",
             json={"text": text}
         )
         response.raise_for_status()
@@ -17,26 +17,26 @@ def redact_prompt(text, server_url="http://localhost:6366"):
         print(f"Error: {e}")
         return {"error": str(e)}
 
-def print_redaction_result(result):
-    """Print redaction result in a readable format"""
+def print_processing_result(result):
+    """Print processing result in a readable format"""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
-    
-    print("\n=== Original vs Redacted ===")
+
+    print("\n=== Original vs Processed ===")
     print(f"Original: {result.get('original_text', 'N/A')}")
-    print(f"Redacted: {result.get('redacted_text', 'N/A')}")
-    
+    print(f"Processed: {result.get('processed_text', 'N/A')}")
+
     matches = result.get("matches", [])
     if matches:
-        print("\n=== Redactions Applied ===")
+        print("\n=== Rules Applied ===")
         for i, match in enumerate(matches, 1):
             print(f"{i}. {match.get('original', 'N/A')} → {match.get('replacement', 'N/A')} ({match.get('rule_name', 'Unknown')})")
     else:
-        print("\nNo redactions applied.")
+        print("\nNo rules applied.")
 
 def run_example_prompts():
-    """Run a set of example prompts through the MCP Firewall"""
+    """Run a set of example prompts through the MCP Firewall rules engine"""
     examples = [
         {
             "name": "Personal Information",
@@ -93,16 +93,16 @@ def run_example_prompts():
         
         print("\n--- Original Prompt ---")
         print(example["prompt"])
-        
-        result = redact_prompt(example["prompt"])
-        
+
+        result = process_prompt(example["prompt"])
+
         # Add original text to result for display
         result["original_text"] = example["prompt"]
-        
-        print_redaction_result(result)
+
+        print_processing_result(result)
 
 def main():
-    parser = argparse.ArgumentParser(description="Test MCP Firewall with example prompts")
+    parser = argparse.ArgumentParser(description="Test MCP Firewall rules engine with example prompts")
     parser.add_argument("--url", default="http://localhost:6366", help="MCP Firewall server URL")
     args = parser.parse_args()
     

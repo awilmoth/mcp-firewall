@@ -1,21 +1,19 @@
 # MCP Firewall
 
-A Model Control Protocol (MCP) compatible service that provides text redaction capabilities for sensitive information. Protect your data when using Large Language Models like Claude.
+A Model Control Protocol (MCP) compatible service that provides a text filtering firewall with a powerful rules engine. Protect your data and enforce policies when using Large Language Models like Claude.
 
 ## Overview
 
-MCP Firewall acts as a filtering layer that automatically redacts sensitive data patterns before sending text to LLMs, helping to prevent data leakage. It integrates seamlessly with Claude and other MCP-compatible LLMs.
+MCP Firewall acts as a filtering layer with a rules engine that processes text data before sending it to LLMs. It can identify patterns, enforce policies, and transform text content according to customizable rules. It integrates seamlessly with Claude and other MCP-compatible LLMs.
 
 ## Features
 
-- **Automatic Redaction** of sensitive information:
-  - Social Security Numbers (SSN) 
-  - Credit Card Numbers
-  - Email Addresses
-  - Phone Numbers
-  - API Keys
-  - Passwords
-  - Easily add your own custom patterns
+- **Powerful Rules Engine** for text processing:
+  - Pattern matching with regular expressions
+  - Default rules for sensitive information (SSN, Credit Cards, etc.)
+  - Customizable replacements and transformations
+  - Rule-based policy enforcement
+  - Easily add your own custom rules
 - **REST API** for direct integration with any application
 - **MCP Protocol Support** for seamless integration with Claude and other LLMs
 - **Customizable Rules** that can be added, updated, or deleted via API
@@ -38,8 +36,8 @@ docker build -t mcp-firewall .
 # Run the container
 docker run -d -p 6366:6366 --name mcp-firewall mcp-firewall
 
-# Test redaction
-curl -X POST http://localhost:6366/redact \
+# Test text processing
+curl -X POST http://localhost:6366/process \
   -H "Content-Type: application/json" \
   -d '{"text":"My SSN is 123-45-6789 and my email is test@example.com"}'
 ```
@@ -60,20 +58,22 @@ python app/mcp_firewall.py
 
 ## API Endpoints
 
-### Redaction
+### Text Processing
 
-- `POST /redact` - Redact sensitive information from text
-  - Request: `{"text": "text to redact"}`
-  - Response: `{"redacted_text": "redacted text", "matches": [...]}`
+- `POST /process` - Process text through the firewall rules engine
+  - Request: `{"text": "text to process"}`
+  - Response: `{"processed_text": "processed text", "matches": [...]}`
+
+- `POST /redact` - Legacy endpoint that redirects to process (for backwards compatibility)
 
 ### Rules Management
 
-- `GET /rules` - Get all rules
-- `POST /rules` - Add a new rule
+- `GET /rules` - Get all firewall rules
+- `POST /rules` - Add a new firewall rule
   - Request: `{"name": "Rule Name", "pattern": "regex pattern", "replacement": "<REPLACEMENT>", "description": "Description", "enabled": true}`
-- `PUT /rules/{rule_id}` - Update a rule
-- `DELETE /rules/{rule_id}` - Delete a rule
-- `POST /rules/reset` - Reset rules to defaults
+- `PUT /rules/{rule_id}` - Update a firewall rule
+- `DELETE /rules/{rule_id}` - Delete a firewall rule
+- `POST /rules/reset` - Reset firewall rules to defaults
 
 ### System
 
@@ -93,7 +93,7 @@ To integrate with Claude, configure the `.mcp.json` file to point to the MCP Fir
       "timeout_ms": 60000,
       "protocol_version": "execute",
       "tools": [
-        "redact_text",
+        "process_text",
         "get_rules",
         "add_rule",
         "update_rule",
@@ -116,7 +116,7 @@ MCP Firewall can be deployed to Smithery for enterprise use:
 
 ## Custom Rules
 
-You can add custom redaction rules via the API:
+You can add custom firewall rules via the API:
 
 ```bash
 # Add a new rule for AWS keys
@@ -137,26 +137,27 @@ You can use MCP Firewall programmatically in Python applications:
 ```python
 import requests
 
-def redact_sensitive_info(text):
+def process_text(text):
     response = requests.post(
-        "http://localhost:6366/redact",
+        "http://localhost:6366/process",
         json={"text": text}
     )
     result = response.json()
-    return result["redacted_text"]
+    return result["processed_text"]
 
 # Example usage
-redacted = redact_sensitive_info("My credit card is 4111-1111-1111-1111")
-print(redacted)  # "My credit card is <CREDIT_CARD>"
+processed = process_text("My credit card is 4111-1111-1111-1111")
+print(processed)  # "My credit card is <CREDIT_CARD>"
 ```
 
-## Security Considerations
+## Security and Usage Considerations
 
-MCP Firewall helps protect sensitive information but has limitations:
+MCP Firewall provides a flexible rules engine for text processing but has some considerations:
 
-- It relies on regex patterns that may not catch all variations of sensitive data
-- New patterns of sensitive data may require adding new rules
-- It should be part of a broader security strategy, not the sole protection
+- It relies on regex patterns for matching, which have inherent limitations
+- The effectiveness depends on the quality and comprehensiveness of your rules
+- Processing very large texts may impact performance
+- For security use cases, it should be part of a broader security strategy
 
 ## License
 

@@ -1,10 +1,10 @@
 # Integrating MCP Firewall with Claude
 
-This guide explains how to integrate MCP Firewall with Claude to protect sensitive information in your prompts.
+This guide explains how to integrate MCP Firewall with Claude to process text through its rules engine.
 
 ## Overview
 
-MCP Firewall works as a preprocessing layer for your Claude interactions, automatically redacting sensitive information like:
+MCP Firewall works as a preprocessing layer for your Claude interactions, using its rules engine to process text according to defined patterns and policies. By default, it comes with rules for sensitive information like:
 
 - Social Security Numbers
 - Credit Card Numbers
@@ -12,7 +12,8 @@ MCP Firewall works as a preprocessing layer for your Claude interactions, automa
 - Phone Numbers
 - API Keys
 - Passwords
-- Any custom patterns you define
+
+You can customize existing rules or add your own to implement any text processing policy your application requires.
 
 ## Setup
 
@@ -38,7 +39,7 @@ Create a `.mcp.json` file in your Claude project directory with the following co
       "timeout_ms": 60000,
       "protocol_version": "execute",
       "tools": [
-        "redact_text",
+        "process_text",
         "get_rules",
         "add_rule",
         "update_rule",
@@ -64,7 +65,7 @@ For Claude API, include the MCP configuration in your API request.
 
 ### Basic Usage
 
-When you send a prompt to Claude, sensitive information will be automatically redacted:
+When you send a prompt to Claude, text will be automatically processed through your rules:
 
 **Original Prompt:**
 ```
@@ -72,7 +73,7 @@ My SSN is 123-45-6789 and my credit card number is 4111-1111-1111-1111.
 Can you analyze this customer data?
 ```
 
-**What Claude Receives:**
+**What Claude Receives (with default rules):**
 ```
 My SSN is <SSN> and my credit card number is <CREDIT_CARD>.
 Can you analyze this customer data?
@@ -80,7 +81,7 @@ Can you analyze this customer data?
 
 ### Managing Rules with Claude
 
-You can use Claude to manage the redaction rules:
+You can use Claude to manage the firewall rules:
 
 **Get Current Rules:**
 ```
@@ -89,17 +90,17 @@ What rules are currently configured in the MCP Firewall?
 
 **Add a New Rule:**
 ```
-Add a rule to redact Bitcoin wallet addresses in prompts.
+Add a rule to process Bitcoin wallet addresses in prompts.
 ```
 
 **Update a Rule:**
 ```
-Update the email redaction rule to use <REDACTED_EMAIL> instead of <EMAIL>.
+Update the email rule to use <EMAIL_ADDRESS> instead of <EMAIL>.
 ```
 
 **Reset Rules:**
 ```
-Reset all redaction rules to defaults.
+Reset all firewall rules to defaults.
 ```
 
 ## Troubleshooting
@@ -120,9 +121,10 @@ If the MCP Firewall isn't working correctly, check:
    docker logs mcp-firewall
    ```
 
-## Security Considerations
+## Usage Considerations
 
-- MCP Firewall adds an important layer of protection but is not foolproof
-- Regular expressions might not catch all variants of sensitive information
-- Always review prompts before sending to ensure sensitive information is redacted
-- Regularly update your rules to cover new types of sensitive information
+- MCP Firewall's rules engine adds a powerful layer of text processing
+- Regular expressions have limitations in pattern matching capabilities
+- The effectiveness of the firewall depends on the quality of your rules
+- Regularly update your rules to improve detection and processing
+- For sensitive information protection, review prompts before sending to ensure proper processing

@@ -3,7 +3,7 @@
 
 name: mcp-firewall
 version: 1.0.0
-description: MCP Firewall for protecting sensitive information when using LLMs
+description: MCP Firewall with rules engine for filtering text when using LLMs
 
 # Docker image configuration
 image:
@@ -35,16 +35,16 @@ env:
 # MCP tool configuration
 mcp:
   tools:
-    - name: redact_text
-      description: Redacts sensitive information from text
+    - name: process_text
+      description: Process text through the firewall rules engine
     - name: get_rules
-      description: Gets all redaction rules
+      description: Gets all firewall rules
     - name: add_rule
-      description: Adds a new redaction rule
+      description: Adds a new firewall rule
     - name: update_rule
-      description: Updates an existing redaction rule
+      description: Updates an existing firewall rule
     - name: delete_rule
-      description: Deletes a redaction rule
+      description: Deletes a firewall rule
     - name: reset_rules
       description: Resets rules to defaults
 

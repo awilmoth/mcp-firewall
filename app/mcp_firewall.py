@@ -47,8 +47,8 @@ except ImportError as e:
 class TextRequest(BaseModel):
     text: str
 
-class RedactResponse(BaseModel):
-    redacted_text: str
+class ProcessResponse(BaseModel):
+    processed_text: str
     matches: List[Dict[str, Any]]
 
 class RuleBase(BaseModel):
@@ -155,28 +155,28 @@ def load_rules():
     logger.info(f"Using {len(rules)} default rules")
     save_rules()  # Save default rules
 
-def redact_text_impl(text: str) -> Dict:
-    """Implementation of text redaction"""
+def process_text_impl(text: str) -> Dict:
+    """Implementation of text processing with firewall rules"""
     if not text:
-        return {"redacted_text": "", "matches": []}
-    
-    redacted = text
+        return {"processed_text": "", "matches": []}
+
+    processed = text
     matches = []
-    
+
     # Apply each rule
     for rule in rules:
         if not rule["enabled"]:
             continue
-        
+
         try:
             pattern = re.compile(rule["pattern"])
-            rule_matches = list(pattern.finditer(redacted))
-            
+            rule_matches = list(pattern.finditer(processed))
+
             # Process matches in reverse to avoid offset issues
             for match in reversed(rule_matches):
                 original = match.group(0)
                 replacement = rule["replacement"]
-                
+
                 # Add to matches
                 matches.append({
                     "original": original,
@@ -184,15 +184,15 @@ def redact_text_impl(text: str) -> Dict:
                     "rule_name": rule["name"],
                     "rule_id": rule["id"]
                 })
-                
+
                 # Replace in text
                 start, end = match.span()
-                redacted = redacted[:start] + replacement + redacted[end:]
+                processed = processed[:start] + replacement + processed[end:]
         except Exception as e:
             logger.error(f"Error applying rule {rule['name']}: {e}")
-    
+
     return {
-        "redacted_text": redacted,
+        "processed_text": processed,
         "matches": matches
     }
 
@@ -251,15 +251,15 @@ def reset_rules_impl() -> Dict:
     return {"success": True, "message": f"Reset to {len(rules)} default rules"}
 
 # Create FastAPI app and MCP server
-app = FastAPI(title="MCP Firewall", 
-              description="Firewall for protecting sensitive information when using LLMs",
+app = FastAPI(title="MCP Firewall",
+              description="Firewall with rules engine for filtering text when using LLMs",
               version="1.0.0")
 
 mcp_server = FastMCP(
     app=app,
     metadata={
         "name": "MCP Firewall",
-        "description": "Firewall for protecting sensitive information when using LLMs",
+        "description": "Firewall with rules engine for filtering text when using LLMs",
         "version": "1.0.0"
     }
 )
@@ -269,22 +269,22 @@ load_rules()
 
 # Define MCP tools
 @mcp_server.tool()
-def redact_text(text: str) -> Dict:
-    """Redacts sensitive information from text.
-    
+def process_text(text: str) -> Dict:
+    """Process text through the firewall rules engine.
+
     Args:
-        text: The text to redact
-        
+        text: The text to process
+
     Returns:
-        A dictionary with redacted text and matches
+        A dictionary with processed text and matches
     """
-    logger.info(f"Redacting text with {len(text)} characters")
-    return redact_text_impl(text)
+    logger.info(f"Processing text with {len(text)} characters")
+    return process_text_impl(text)
 
 @mcp_server.tool()
 def get_rules() -> Dict:
-    """Get all redaction rules.
-    
+    """Get all firewall rules.
+
     Returns:
         A dictionary with all rules
     """
@@ -292,17 +292,17 @@ def get_rules() -> Dict:
     return get_rules_impl()
 
 @mcp_server.tool()
-def add_rule(name: str, pattern: str, replacement: str = "<REDACTED>", 
+def add_rule(name: str, pattern: str, replacement: str = "<REDACTED>",
             description: str = "", enabled: bool = True) -> Dict:
-    """Add a new redaction rule.
-    
+    """Add a new firewall rule.
+
     Args:
         name: Name of the rule
         pattern: Regex pattern to match
         replacement: Text to replace matches with
         description: Description of the rule
         enabled: Whether the rule is enabled
-        
+
     Returns:
         Success status and the new rule
     """
@@ -320,8 +320,8 @@ def add_rule(name: str, pattern: str, replacement: str = "<REDACTED>",
 def update_rule(rule_id: str, name: Optional[str] = None, pattern: Optional[str] = None,
                replacement: Optional[str] = None, description: Optional[str] = None,
                enabled: Optional[bool] = None) -> Dict:
-    """Update an existing redaction rule.
-    
+    """Update an existing firewall rule.
+
     Args:
         rule_id: ID of the rule to update
         name: New name for the rule
@@ -329,7 +329,7 @@ def update_rule(rule_id: str, name: Optional[str] = None, pattern: Optional[str]
         replacement: New replacement text
         description: New description
         enabled: New enabled status
-        
+
     Returns:
         Success status and the updated rule
     """
@@ -345,11 +345,11 @@ def update_rule(rule_id: str, name: Optional[str] = None, pattern: Optional[str]
 
 @mcp_server.tool()
 def delete_rule(rule_id: str) -> Dict:
-    """Delete a redaction rule.
-    
+    """Delete a firewall rule.
+
     Args:
         rule_id: ID of the rule to delete
-        
+
     Returns:
         Success status
     """
@@ -372,28 +372,28 @@ async def root():
     return {
         "name": "MCP Firewall",
         "version": "1.0.0",
-        "description": "Firewall for protecting sensitive information when using LLMs"
+        "description": "Firewall with rules engine for filtering text when using LLMs"
     }
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "1.0.0"}
 
-@app.post("/redact", response_model=RedactResponse)
-async def redact_endpoint(text_request: TextRequest):
-    """Redact sensitive information from text."""
-    logger.info(f"Redact endpoint called with {len(text_request.text)} characters")
-    return redact_text_impl(text_request.text)
+@app.post("/process", response_model=ProcessResponse)
+async def process_endpoint(text_request: TextRequest):
+    """Process text through the firewall rules engine."""
+    logger.info(f"Process endpoint called with {len(text_request.text)} characters")
+    return process_text_impl(text_request.text)
 
 @app.get("/rules", response_model=RulesResponse)
 async def get_rules_endpoint():
-    """Get all redaction rules."""
+    """Get all firewall rules."""
     logger.info("Get rules endpoint called")
     return get_rules_impl()
 
 @app.post("/rules", response_model=RuleResponse)
 async def add_rule_endpoint(rule: RuleBase):
-    """Add a new redaction rule."""
+    """Add a new firewall rule."""
     logger.info(f"Add rule endpoint called for {rule.name}")
     result = add_rule_impl(rule.model_dump())
     if "error" in result:
@@ -402,7 +402,7 @@ async def add_rule_endpoint(rule: RuleBase):
 
 @app.put("/rules/{rule_id}", response_model=RuleResponse)
 async def update_rule_endpoint(rule_id: str, rule: RuleBase):
-    """Update an existing redaction rule."""
+    """Update an existing firewall rule."""
     logger.info(f"Update rule endpoint called for {rule_id}")
     result = update_rule_impl(rule_id, rule.model_dump())
     if "error" in result:
@@ -411,7 +411,7 @@ async def update_rule_endpoint(rule_id: str, rule: RuleBase):
 
 @app.delete("/rules/{rule_id}")
 async def delete_rule_endpoint(rule_id: str):
-    """Delete a redaction rule."""
+    """Delete a firewall rule."""
     logger.info(f"Delete rule endpoint called for {rule_id}")
     result = delete_rule_impl(rule_id)
     if "error" in result:
@@ -420,9 +420,20 @@ async def delete_rule_endpoint(rule_id: str):
 
 @app.post("/rules/reset")
 async def reset_rules_endpoint():
-    """Reset rules to defaults."""
+    """Reset firewall rules to defaults."""
     logger.info("Reset rules endpoint called")
     return reset_rules_impl()
+
+# Add backwards compatibility endpoint
+@app.post("/redact")
+async def redact_endpoint_legacy(text_request: TextRequest):
+    """Legacy endpoint that redirects to the process endpoint."""
+    logger.info(f"Legacy redact endpoint called with {len(text_request.text)} characters")
+    result = process_text_impl(text_request.text)
+    # Convert processed_text key to redacted_text for backward compatibility
+    if "processed_text" in result:
+        result["redacted_text"] = result.pop("processed_text")
+    return result
 
 # Run the server
 if __name__ == "__main__":
