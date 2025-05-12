@@ -121,8 +121,9 @@ DEFAULT_RULES = [
     }
 ]
 
-# Initialize rules list
-rules = DEFAULT_RULES.copy()
+# Initialize rules list but don't load them yet (lazy loading)
+rules = []
+rules_loaded = False
 
 # Rule persistence file
 RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'rules.json')
@@ -138,7 +139,12 @@ def save_rules():
 
 def load_rules():
     """Load rules from file"""
-    global rules
+    global rules, rules_loaded
+    
+    # Don't reload if already loaded
+    if rules_loaded:
+        return
+        
     try:
         if os.path.exists(RULES_FILE):
             with open(RULES_FILE, 'r') as f:
@@ -146,6 +152,7 @@ def load_rules():
                 if loaded_rules:
                     rules = loaded_rules
                     logger.info(f"Loaded {len(rules)} rules from {RULES_FILE}")
+                    rules_loaded = True
                     return
     except Exception as e:
         logger.error(f"Error loading rules: {e}")
@@ -154,9 +161,19 @@ def load_rules():
     rules = DEFAULT_RULES.copy()
     logger.info(f"Using {len(rules)} default rules")
     save_rules()  # Save default rules
+    rules_loaded = True
+
+def ensure_rules_loaded():
+    """Ensure rules are loaded before using them"""
+    global rules_loaded
+    if not rules_loaded:
+        logger.info("Lazy loading rules")
+        load_rules()
 
 def process_text_impl(text: str) -> Dict:
     """Implementation of text processing with firewall rules"""
+    ensure_rules_loaded()
+    
     if not text:
         return {"processed_text": "", "matches": []}
 
@@ -198,10 +215,13 @@ def process_text_impl(text: str) -> Dict:
 
 def get_rules_impl() -> Dict[str, List]:
     """Get all rules"""
+    ensure_rules_loaded()
     return {"rules": rules}
 
 def add_rule_impl(rule_data: Dict) -> Dict:
     """Add a new rule"""
+    ensure_rules_loaded()
+    
     rule_id = rule_data.get("id", f"{rule_data.get('name', 'rule').lower().replace(' ', '_')}_{len(rules)}")
     
     # Check if rule with same ID already exists
@@ -222,6 +242,8 @@ def add_rule_impl(rule_data: Dict) -> Dict:
 
 def update_rule_impl(rule_id: str, updates: Dict) -> Dict:
     """Update a rule"""
+    ensure_rules_loaded()
+    
     for i, rule in enumerate(rules):
         if rule["id"] == rule_id:
             for key, value in updates.items():
@@ -234,6 +256,8 @@ def update_rule_impl(rule_id: str, updates: Dict) -> Dict:
 
 def delete_rule_impl(rule_id: str) -> Dict:
     """Delete a rule"""
+    ensure_rules_loaded()
+    
     global rules
     before_count = len(rules)
     rules = [r for r in rules if r["id"] != rule_id]
@@ -245,6 +269,8 @@ def delete_rule_impl(rule_id: str) -> Dict:
 
 def reset_rules_impl() -> Dict:
     """Reset rules to defaults"""
+    ensure_rules_loaded()
+    
     global rules
     rules = DEFAULT_RULES.copy()
     save_rules()
@@ -264,10 +290,9 @@ mcp_server = FastMCP(
     }
 )
 
-# Initialize rules
-load_rules()
+# Do NOT initialize rules here - we'll do it lazily
 
-# Define MCP tools
+# Define MCP tools with lazy loading
 @mcp_server.tool()
 def process_text(text: str) -> Dict:
     """Process text through the firewall rules engine.
