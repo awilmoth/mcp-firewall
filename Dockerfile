@@ -6,11 +6,11 @@ WORKDIR /app
 RUN mkdir -p /app/app
 
 # Copy only what we need
-COPY app/smithery_server.py /app/app/
+COPY app/jsonrpc_discovery_server.py /app/app/
 COPY smithery.yaml /app/
 
 # Make sure the script is executable
-RUN chmod +x /app/app/smithery_server.py
+RUN chmod +x /app/app/jsonrpc_discovery_server.py
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -21,4 +21,4 @@ ENV LOG_LEVEL=DEBUG
 EXPOSE 6366
 
 # Command to run the server
-CMD ["python", "-u", "/app/app/smithery_server.py"]
+CMD ["python", "-u", "/app/app/jsonrpc_discovery_server.py"]

@@ -2,13 +2,13 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start command configuration - uses Smithery-compatible server
+# Start command configuration - using combined JSON-RPC and discovery server
 startCommand:
   type: http
-  command: ["python", "-u", "/app/app/smithery_server.py"]
+  command: ["python", "-u", "/app/app/jsonrpc_discovery_server.py"]
   port: 6366
   healthCheckPath: "/health"
-  readinessTimeoutSeconds: 120
+  readinessTimeoutSeconds: 150
 
 # Environment variables
 env:
