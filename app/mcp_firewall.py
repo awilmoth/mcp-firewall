@@ -630,6 +630,45 @@ async def smithery_health():
         "protocolVersion": "2.0"
     }
 
+# CRITICAL: Specifically required for Smithery compatibility
+# The /mcp endpoint MUST be available for Smithery deployments
+@app.get("/mcp")
+@app.post("/mcp")
+@app.delete("/mcp")
+async def mcp_endpoint(request: Request):
+    debug_to_stdio(f"MCP endpoint called with method: {request.method}")
+    
+    # Check for config parameter
+    config = request.query_params.get("config", None)
+    if config:
+        try:
+            import base64
+            decoded_config = base64.b64decode(config).decode('utf-8')
+            debug_to_stdio(f"Received config: {decoded_config}")
+        except Exception as e:
+            debug_to_stdio(f"Error decoding config: {e}")
+    
+    # Handle based on HTTP method
+    if request.method == "GET":
+        # Return tool discovery info
+        return {
+            "protocolVersion": "2.0",
+            "tools": TOOLS,
+            "name": "MCP Firewall",
+            "version": "1.0.0",
+            "description": "Firewall with rules engine for filtering text when using LLMs"
+        }
+    elif request.method == "POST":
+        # Handle as JSON-RPC request
+        return await jsonrpc_endpoint(request)
+    else:  # DELETE
+        # Handle connection termination
+        debug_to_stdio("DELETE request to /mcp - terminating connection")
+        return {
+            "status": "connection_closed",
+            "message": "Connection terminated successfully"
+        }
+
 @app.get("/api/v2")
 @app.post("/api/v2")
 async def api_v2(request: Request):
@@ -744,7 +783,8 @@ async def health():
                 "/smithery/info",
                 "/smithery/health",
                 "/execute/{tool_name}",
-                "/health"
+                "/health",
+                "/mcp"
             ],
             "protocols_supported": ["MCP", "JSON-RPC 2.0"],
             "tools_supported": [tool["name"] for tool in TOOLS],
@@ -1010,7 +1050,15 @@ def preload_rules():
 
 # Run the server
 if __name__ == "__main__":
-    port = 6366
+    # Check environment for port
+    import os
+    port = int(os.environ.get("PORT", "6366"))
+    
+    # Check if standard port 80 is requested
+    if os.environ.get("USE_PORT_80", "").lower() in ("1", "true", "yes"):
+        port = 80
+        debug_to_stdio("Using standard web port 80 as requested")
+        
     debug_to_stdio(f"Starting MCP Firewall on port {port}")
 
     # Preload rules to avoid issues with lazy loading

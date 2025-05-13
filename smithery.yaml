@@ -2,12 +2,12 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start command configuration - using MCP Firewall server
-startCommand:
-  type: http
-  command: ["python", "-u", "/app/mcp_firewall.py"]
+# Start command configuration
+start:
+  command: ["python", "-u", "app/mcp_firewall.py"]
   port: 6366
-  healthCheckPath: "/smithery/health"
+  transport: http
+  healthCheckPath: "/mcp"
   readinessTimeoutSeconds: 300
 
 # Environment variables
