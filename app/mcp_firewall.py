@@ -427,8 +427,8 @@ try:
         metadata={
             "name": "MCP Firewall",
             "description": "Firewall with rules engine for filtering text when using LLMs",
-            "version": "1.0.0"
-            # Removed protocolVersion to let MCP library use its default
+            "version": "1.0.0",
+            "protocolVersion": "2024-11-05"  # Use the standard MCP date-based protocol version format
         }
     )
     debug_to_stdio("Successfully created FastAPI app and MCP server")
@@ -627,7 +627,7 @@ async def smithery_health():
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "protocolVersion": "1.0"
+        "protocolVersion": "2024-11-05"
     }
 
 # CRITICAL: Specifically required for Smithery compatibility
@@ -658,7 +658,7 @@ async def mcp_endpoint(request: Request):
                         "jsonrpc": "2.0",
                         "id": config_json.get("id", "1"),
                         "result": {
-                            # Removed protocolVersion to let MCP library choose default
+                            "protocolVersion": "2024-11-05",  # Use consistent protocol version
                             "capabilities": {
                                 "toolDiscovery": True,
                                 "toolExecution": True
@@ -679,7 +679,7 @@ async def mcp_endpoint(request: Request):
     if request.method == "GET":
         # Return tool discovery info
         return {
-            # Removed protocolVersion to let Smithery use its default
+            "protocolVersion": "2024-11-05",  # Use consistent protocol version
             "tools": TOOLS,
             "name": "MCP Firewall",
             "version": "1.0.0",
@@ -793,7 +793,7 @@ async def health():
             "status": "ok",
             "name": "MCP Firewall",
             "version": "1.0.0",
-            "protocolVersion": "1.0",
+            "protocolVersion": "2024-11-05",
             "rule_count": rule_count,
             "rules_loaded": rules_loaded,
             "endpoints": [
@@ -824,7 +824,7 @@ async def health():
             "error": str(e),
             "name": "MCP Firewall",
             "version": "1.0.0",
-            "protocolVersion": "1.0",
+            "protocolVersion": "2024-11-05",
             "timestamp": datetime.now().isoformat()
         }
 
@@ -865,7 +865,7 @@ async def jsonrpc_endpoint(request: Request):
             if method in ["discovery", "getServerInfo", "listTools", "getMetadata", "getProtocolInfo"]:
                 debug_to_stdio(f"Handling discovery request with method: {method}")
                 discovery_result = {
-                    "protocolVersion": "1.0",
+                    "protocolVersion": "2024-11-05",  # Use consistent protocol version
                     "capabilities": {
                         "toolDiscovery": True,
                         "toolExecution": True
@@ -883,9 +883,9 @@ async def jsonrpc_endpoint(request: Request):
             # Handle smithery-specific discovery method by returning full tool list
             elif method == "smithery.discovery":
                 debug_to_stdio("Handling smithery.discovery request")
-                # Smithery format with protocol version 1.0
+                # Smithery format with correct protocol version
                 smithery_result = {
-                    "protocolVersion": "1.0",
+                    "protocolVersion": "2024-11-05",
                     "tools": TOOLS,
                     "name": "MCP Firewall",
                     "version": "1.0.0",
@@ -902,7 +902,7 @@ async def jsonrpc_endpoint(request: Request):
                 
                 # Return successful initialization response
                 initialize_result = {
-                    # Removed protocolVersion to let MCP library choose default
+                    "protocolVersion": "2024-11-05",  # Use consistent protocol version
                     "capabilities": {
                         "toolDiscovery": True,
                         "toolExecution": True
@@ -983,14 +983,14 @@ async def jsonrpc_endpoint(request: Request):
             debug_to_stdio("Handling direct tools request")
             return {
                 "tools": TOOLS,
-                "protocolVersion": "1.0"
+                "protocolVersion": "2024-11-05"
             }
             
         # If it's not a JSON-RPC request, try to handle as tool discovery
         debug_to_stdio("Handling non-JSON-RPC request as tool discovery")
         return {
             "tools": TOOLS,
-            "protocolVersion": "1.0",
+            "protocolVersion": "2024-11-05",
             "name": "MCP Firewall",
             "version": "1.0.0",
             "description": "Firewall with rules engine for filtering text when using LLMs"
