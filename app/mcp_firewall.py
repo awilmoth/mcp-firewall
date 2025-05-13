@@ -365,7 +365,7 @@ TOOLS = [
                 "enabled": {
                     "type": "boolean",
                     "description": "Whether the rule is enabled",
-                    "default": true
+                    "default": True
                 }
             }
         }
@@ -790,6 +790,7 @@ async def mcp_endpoint(request: Request):
                 body_str = body_bytes.decode('utf-8')
                 debug_to_stdio(f"POST to /mcp received body: {body_str}")
                 
+                import json
                 json_data = json.loads(body_str)
                 
                 # Check if this is a direct tools/list request
