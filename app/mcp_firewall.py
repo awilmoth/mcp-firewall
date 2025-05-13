@@ -504,8 +504,10 @@ try:
         CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS", "PUT", "PATCH"],
+        allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "User-Agent"],
+        expose_headers=["Content-Length", "Content-Type"],
+        max_age=600  # Cache preflight requests for 10 minutes
     )
 
     # Simplified MCP server setup
@@ -773,8 +775,51 @@ async def mcp_endpoint(request: Request):
             "description": "Firewall with rules engine for filtering text when using LLMs"
         }
     elif request.method == "POST":
-        # Handle as JSON-RPC request
-        return await jsonrpc_endpoint(request)
+        # Handle POST request specifically to help debug the 502 error
+        try:
+            # Try to parse the JSON body
+            body_bytes = await request.body()
+            if not body_bytes:
+                debug_to_stdio("POST to /mcp received empty body")
+                return {
+                    "error": "Empty request body"
+                }
+                
+            # Parse the JSON request
+            try:
+                body_str = body_bytes.decode('utf-8')
+                debug_to_stdio(f"POST to /mcp received body: {body_str}")
+                
+                json_data = json.loads(body_str)
+                
+                # Check if this is a direct tools/list request
+                if json_data.get("method") == "tools/list":
+                    debug_to_stdio("Direct tools/list request to /mcp endpoint")
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": json_data.get("id", "1"),
+                        "result": {
+                            "tools": TOOLS,
+                            "protocolVersion": "2024-11-05"
+                        }
+                    }
+                    
+                # Otherwise handle normally through JSON-RPC endpoint
+                return await jsonrpc_endpoint(request)
+            except json.JSONDecodeError as e:
+                debug_to_stdio(f"JSON decode error on /mcp POST: {e}")
+                return {
+                    "error": f"Invalid JSON: {str(e)}"
+                }
+        except Exception as e:
+            debug_to_stdio(f"Error processing POST to /mcp: {str(e)}")
+            import traceback
+            debug_to_stdio(traceback.format_exc())
+            
+            # Return a more helpful error response than a 500
+            return {
+                "error": f"Server error: {str(e)}"
+            }
     else:  # DELETE
         # Handle connection termination
         debug_to_stdio("DELETE request to /mcp - terminating connection")
@@ -936,6 +981,14 @@ def create_jsonrpc_response(result=None, error=None, id="1"):
 async def jsonrpc_endpoint(request: Request):
     debug_to_stdio("JSON-RPC endpoint called")
     try:
+        # For debugging the 502 error, print the raw request body
+        body_bytes = await request.body()
+        try:
+            body_str = body_bytes.decode('utf-8')
+            debug_to_stdio(f"Raw JSON-RPC request body: {body_str}")
+        except Exception:
+            debug_to_stdio("Could not decode request body as UTF-8")
+            
         data = await request.json()
         debug_to_stdio(f"Received JSON-RPC request: {data}")
         
@@ -979,6 +1032,19 @@ async def jsonrpc_endpoint(request: Request):
                     "description": "Firewall with rules engine for filtering text when using LLMs"
                 }
                 
+                # Special handling for tools/list to help debug the 502 error
+                if method == "tools/list":
+                    debug_to_stdio("Handling explicit tools/list request")
+                    # Return a simplified response that just focuses on the tools
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            "tools": TOOLS,
+                            "protocolVersion": "2024-11-05"
+                        }
+                    }
+                
                 return create_jsonrpc_response(result=smithery_result, id=request_id)
                 
             # Handle initialize method (required by Smithery)
@@ -1003,6 +1069,48 @@ async def jsonrpc_endpoint(request: Request):
                 
                 return create_jsonrpc_response(result=initialize_result, id=request_id)
             
+            # Handle runnable/run method (which might be what Smithery expects)
+            elif method == "runnable/run":
+                debug_to_stdio(f"Handling runnable/run request with params: {params}")
+                
+                # Extract the tool to run and its input
+                tool_name = params.get("runnable", {}).get("name", "")
+                tool_input = params.get("input", {})
+                
+                debug_to_stdio(f"Runnable/run: tool={tool_name}, input={tool_input}")
+                
+                # Execute the appropriate tool
+                if tool_name == "process_text":
+                    text = tool_input.get("text", "")
+                    result = process_text_impl(text)
+                    return create_jsonrpc_response(result=result, id=request_id)
+                elif tool_name == "get_rules":
+                    result = get_rules_impl()
+                    return create_jsonrpc_response(result=result, id=request_id)
+                elif tool_name == "add_rule":
+                    result = add_rule_impl(tool_input)
+                    return create_jsonrpc_response(result=result, id=request_id)
+                elif tool_name == "update_rule":
+                    rule_id = tool_input.get("rule_id", "")
+                    updates = {k: v for k, v in tool_input.items() if k != "rule_id"}
+                    result = update_rule_impl(rule_id, updates)
+                    return create_jsonrpc_response(result=result, id=request_id)
+                elif tool_name == "delete_rule":
+                    rule_id = tool_input.get("rule_id", "")
+                    result = delete_rule_impl(rule_id)
+                    return create_jsonrpc_response(result=result, id=request_id)
+                elif tool_name == "reset_rules":
+                    result = reset_rules_impl()
+                    return create_jsonrpc_response(result=result, id=request_id)
+                else:
+                    return create_jsonrpc_response(
+                        error={
+                            "code": -32601,
+                            "message": f"Unknown tool in runnable/run: {tool_name}"
+                        },
+                        id=request_id
+                    )
+                    
             # Handle process_text method
             elif method == "process_text":
                 text = params.get("text", "")
