@@ -417,7 +417,8 @@ async def root():
     return {
         "name": "MCP Firewall",
         "version": "1.0.0",
-        "description": "Firewall with rules engine for filtering text when using LLMs"
+        "description": "Firewall with rules engine for filtering text when using LLMs",
+        "protocolVersion": "2.0"
     }
 
 # Endpoint for Smithery tool scanning
@@ -505,6 +506,7 @@ async def health():
         return {
             "status": "ok",
             "version": "1.0.0",
+            "protocolVersion": "2.0",
             "rule_count": rule_count,
             "rules_loaded": rules_loaded,
             "timestamp": datetime.now().isoformat()
@@ -515,7 +517,100 @@ async def health():
             "status": "error",
             "error": str(e),
             "version": "1.0.0",
+            "protocolVersion": "2.0",
             "timestamp": datetime.now().isoformat()
+        }
+
+# JSON-RPC endpoint for Smithery
+@app.post("/")
+async def jsonrpc_endpoint(request: Request):
+    debug_to_stdio("JSON-RPC endpoint called")
+    try:
+        data = await request.json()
+        debug_to_stdio(f"Received JSON-RPC request: {data}")
+        
+        # Check if this is a JSON-RPC request
+        if "jsonrpc" in data and "method" in data:
+            jsonrpc_version = data.get("jsonrpc", "2.0")
+            method = data.get("method", "")
+            params = data.get("params", {})
+            request_id = data.get("id", "1")
+            
+            debug_to_stdio(f"JSON-RPC method: {method}")
+            
+            # Handle discovery method
+            if method == "discovery" or method == "getServerInfo":
+                discovery_result = {
+                    "protocolVersion": "2.0",
+                    "capabilities": {
+                        "toolDiscovery": True,
+                        "toolExecution": True
+                    },
+                    "serverInfo": {
+                        "name": "MCP Firewall",
+                        "version": "1.0.0",
+                        "description": "Firewall with rules engine for filtering text when using LLMs"
+                    },
+                    "tools": [
+                        {
+                            "name": "process_text",
+                            "description": "Process text through the firewall rules engine",
+                            "parameters": {
+                                "text": {
+                                    "type": "string",
+                                    "description": "The text to process"
+                                }
+                            }
+                        },
+                        {
+                            "name": "get_rules",
+                            "description": "Gets all firewall rules",
+                            "parameters": {}
+                        }
+                    ]
+                }
+                
+                return {
+                    "jsonrpc": jsonrpc_version,
+                    "id": request_id,
+                    "result": discovery_result
+                }
+            
+            # Handle process_text method
+            elif method == "process_text":
+                text = params.get("text", "")
+                result = process_text_impl(text)
+                return {
+                    "jsonrpc": jsonrpc_version,
+                    "id": request_id,
+                    "result": result
+                }
+            
+            # Handle other methods...
+            else:
+                return {
+                    "jsonrpc": jsonrpc_version,
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Method not found: {method}"
+                    }
+                }
+        
+        # If it's not a JSON-RPC request, return a default response
+        return {
+            "message": "Invalid JSON-RPC request"
+        }
+    
+    except Exception as e:
+        debug_to_stdio(f"Error processing JSON-RPC request: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "error": {
+                "code": -32700,
+                "message": f"Parse error: {str(e)}"
+            }
         }
 
 @app.post("/process", response_model=ProcessResponse)
