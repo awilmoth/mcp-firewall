@@ -427,8 +427,8 @@ try:
         metadata={
             "name": "MCP Firewall",
             "description": "Firewall with rules engine for filtering text when using LLMs",
-            "version": "1.0.0",
-            "protocolVersion": "1.0"
+            "version": "1.0.0"
+            # Removed protocolVersion to let MCP library use its default
         }
     )
     debug_to_stdio("Successfully created FastAPI app and MCP server")
@@ -658,7 +658,7 @@ async def mcp_endpoint(request: Request):
                         "jsonrpc": "2.0",
                         "id": config_json.get("id", "1"),
                         "result": {
-                            "protocolVersion": "1.0",
+                            # Removed protocolVersion to let MCP library choose default
                             "capabilities": {
                                 "toolDiscovery": True,
                                 "toolExecution": True
@@ -679,7 +679,7 @@ async def mcp_endpoint(request: Request):
     if request.method == "GET":
         # Return tool discovery info
         return {
-            "protocolVersion": "1.0",
+            # Removed protocolVersion to let Smithery use its default
             "tools": TOOLS,
             "name": "MCP Firewall",
             "version": "1.0.0",
@@ -902,7 +902,7 @@ async def jsonrpc_endpoint(request: Request):
                 
                 # Return successful initialization response
                 initialize_result = {
-                    "protocolVersion": "1.0",
+                    # Removed protocolVersion to let MCP library choose default
                     "capabilities": {
                         "toolDiscovery": True,
                         "toolExecution": True
