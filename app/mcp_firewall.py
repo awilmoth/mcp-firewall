@@ -643,10 +643,37 @@ async def mcp_endpoint(request: Request):
     if config:
         try:
             import base64
+            import json
             decoded_config = base64.b64decode(config).decode('utf-8')
             debug_to_stdio(f"Received config: {decoded_config}")
+            
+            # If this is an initialization request, handle it immediately
+            if "initialize" in decoded_config.lower():
+                try:
+                    config_json = json.loads(decoded_config)
+                    debug_to_stdio(f"Parsed config JSON: {config_json}")
+                    
+                    # Return successful initialization response
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": config_json.get("id", "1"),
+                        "result": {
+                            "protocolVersion": "2.0",
+                            "capabilities": {
+                                "toolDiscovery": True,
+                                "toolExecution": True
+                            },
+                            "serverInfo": {
+                                "name": "MCP Firewall",
+                                "version": "1.0.0",
+                                "description": "Firewall with rules engine for filtering text when using LLMs"
+                            }
+                        }
+                    }
+                except json.JSONDecodeError:
+                    debug_to_stdio("Failed to parse config as JSON")
         except Exception as e:
-            debug_to_stdio(f"Error decoding config: {e}")
+            debug_to_stdio(f"Error processing config: {e}")
     
     # Handle based on HTTP method
     if request.method == "GET":
@@ -866,6 +893,28 @@ async def jsonrpc_endpoint(request: Request):
                 }
                 
                 return create_jsonrpc_response(result=smithery_result, id=request_id)
+                
+            # Handle initialize method (required by Smithery)
+            elif method == "initialize":
+                debug_to_stdio("Handling initialize request")
+                config = params.get("config", {})
+                debug_to_stdio(f"Initialize with config: {config}")
+                
+                # Return successful initialization response
+                initialize_result = {
+                    "protocolVersion": "2.0",
+                    "capabilities": {
+                        "toolDiscovery": True,
+                        "toolExecution": True
+                    },
+                    "serverInfo": {
+                        "name": "MCP Firewall",
+                        "version": "1.0.0",
+                        "description": "Firewall with rules engine for filtering text when using LLMs"
+                    }
+                }
+                
+                return create_jsonrpc_response(result=initialize_result, id=request_id)
             
             # Handle process_text method
             elif method == "process_text":
