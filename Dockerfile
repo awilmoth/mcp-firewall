@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -14,6 +14,9 @@ RUN chmod +x /app/mcp_firewall.py
 
 # Create required directories
 RUN mkdir -p /app/logs /app/data
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y git && apt-get clean
 
 # Install required packages
 RUN pip install fastapi uvicorn pydantic 

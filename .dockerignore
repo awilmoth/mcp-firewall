@@ -1,0 +1,30 @@
+# Git files
+.git
+.gitignore
+
+# Python cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+env/
+venv/
+ENV/
+build/
+
+# Editor files
+.idea/
+.vscode/
+
+# Logs
+logs
+*.log
+
+# Data
+app/data/*
+
+# Only include specific files we need
+*
+!app/mcp_firewall.py
+!smithery.yaml
