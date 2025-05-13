@@ -284,9 +284,122 @@ def reset_rules_impl() -> Dict:
     save_rules()
     return {"success": True, "message": f"Reset to {len(rules)} default rules"}
 
+# Define tools information that will be used for discovery
+TOOLS = [
+    {
+        "name": "process_text",
+        "description": "Process text through the firewall rules engine",
+        "parameters": {
+            "text": {
+                "type": "string",
+                "description": "The text to process"
+            }
+        }
+    },
+    {
+        "name": "get_rules",
+        "description": "Gets all firewall rules",
+        "parameters": {}
+    },
+    {
+        "name": "add_rule",
+        "description": "Adds a new firewall rule",
+        "parameters": {
+            "name": {
+                "type": "string",
+                "description": "Name of the rule"
+            },
+            "pattern": {
+                "type": "string",
+                "description": "Regex pattern to match"
+            },
+            "replacement": {
+                "type": "string",
+                "description": "Text to replace matches with"
+            },
+            "description": {
+                "type": "string",
+                "description": "Description of the rule"
+            },
+            "enabled": {
+                "type": "boolean",
+                "description": "Whether the rule is enabled"
+            }
+        }
+    },
+    {
+        "name": "update_rule",
+        "description": "Updates an existing firewall rule",
+        "parameters": {
+            "rule_id": {
+                "type": "string",
+                "description": "ID of the rule to update"
+            }
+        }
+    },
+    {
+        "name": "delete_rule",
+        "description": "Deletes a firewall rule",
+        "parameters": {
+            "rule_id": {
+                "type": "string",
+                "description": "ID of the rule to delete"
+            }
+        }
+    },
+    {
+        "name": "reset_rules",
+        "description": "Resets rules to defaults",
+        "parameters": {}
+    }
+]
+
 # Create FastAPI app and MCP server with minimal configuration
 try:
     debug_to_stdio("Creating FastAPI app and MCP server")
+    from fastapi.middleware.cors import CORSMiddleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+    
+    # Custom middleware for logging all requests
+    class RequestLoggingMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            # Get client IP and request details
+            client_host = request.client.host if request.client else "unknown"
+            method = request.method
+            url = str(request.url)
+            
+            # Log the request
+            request_id = f"{datetime.now().strftime('%Y%m%d%H%M%S')}-{os.getpid()}"
+            debug_to_stdio(f"REQUEST {request_id}: {method} {url} from {client_host}")
+            
+            # Try to get request body for debugging
+            body = None
+            if method in ["POST", "PUT", "PATCH"]:
+                try:
+                    # Create a copy of the request to read the body
+                    body_bytes = await request.body()
+                    # Log first 1000 chars only to avoid huge logs
+                    if body_bytes:
+                        try:
+                            body = body_bytes.decode('utf-8')[:1000]
+                            debug_to_stdio(f"REQUEST BODY {request_id}: {body}")
+                        except UnicodeDecodeError:
+                            debug_to_stdio(f"REQUEST BODY {request_id}: [Binary data]")
+                except Exception as e:
+                    debug_to_stdio(f"Error reading request body: {e}")
+            
+            try:
+                # Pass the request to the next middleware/route handler
+                response = await call_next(request)
+                
+                # Log the response status
+                debug_to_stdio(f"RESPONSE {request_id}: {response.status_code}")
+                
+                return response
+            except Exception as e:
+                debug_to_stdio(f"ERROR {request_id}: {str(e)}")
+                raise
+    
     app = FastAPI(
         title="MCP Firewall",
         description="Firewall with rules engine for filtering text when using LLMs",
@@ -294,6 +407,18 @@ try:
         # Disable docs to reduce complexity
         docs_url=None,
         redoc_url=None
+    )
+    
+    # Add request logging middleware
+    app.add_middleware(RequestLoggingMiddleware)
+    
+    # Add CORS middleware to allow requests from any origin
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # Simplified MCP server setup
@@ -421,80 +546,175 @@ async def root():
         "protocolVersion": "2.0"
     }
 
+@app.get("/api")
+async def api_root():
+    debug_to_stdio("API root endpoint called")
+    return {
+        "name": "MCP Firewall", 
+        "version": "1.0.0",
+        "protocolVersion": "2.0"
+    }
+
+@app.get("/api/v1")
+async def api_v1():
+    debug_to_stdio("API v1 endpoint called")
+    return {
+        "name": "MCP Firewall", 
+        "version": "1.0.0",
+        "protocolVersion": "2.0"
+    }
+
 # Endpoint for Smithery tool scanning
 @app.post("/tools")
+@app.get("/tools")
 async def tools_list():
     debug_to_stdio("Tools endpoint called for Smithery scanning")
     return {
-        "tools": [
-            {
-                "name": "process_text",
-                "description": "Process text through the firewall rules engine",
-                "parameters": {
-                    "text": {
-                        "type": "string",
-                        "description": "The text to process"
-                    }
-                }
-            },
-            {
-                "name": "get_rules",
-                "description": "Gets all firewall rules",
-                "parameters": {}
-            },
-            {
-                "name": "add_rule",
-                "description": "Adds a new firewall rule",
-                "parameters": {
-                    "name": {
-                        "type": "string",
-                        "description": "Name of the rule"
-                    },
-                    "pattern": {
-                        "type": "string",
-                        "description": "Regex pattern to match"
-                    },
-                    "replacement": {
-                        "type": "string",
-                        "description": "Text to replace matches with"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Description of the rule"
-                    },
-                    "enabled": {
-                        "type": "boolean",
-                        "description": "Whether the rule is enabled"
-                    }
-                }
-            },
-            {
-                "name": "update_rule",
-                "description": "Updates an existing firewall rule",
-                "parameters": {
-                    "rule_id": {
-                        "type": "string",
-                        "description": "ID of the rule to update"
-                    }
-                }
-            },
-            {
-                "name": "delete_rule",
-                "description": "Deletes a firewall rule",
-                "parameters": {
-                    "rule_id": {
-                        "type": "string",
-                        "description": "ID of the rule to delete"
-                    }
-                }
-            },
-            {
-                "name": "reset_rules",
-                "description": "Resets rules to defaults",
-                "parameters": {}
-            }
-        ]
+        "tools": TOOLS,
+        "protocolVersion": "2.0",
+        "name": "MCP Firewall",
+        "version": "1.0.0",
+        "description": "Firewall with rules engine for filtering text when using LLMs"
     }
+
+# Add another direct endpoint for tools
+@app.post("/api/tools")
+@app.get("/api/tools")
+async def api_tools_list():
+    debug_to_stdio("API tools endpoint called")
+    return {
+        "tools": TOOLS,
+        "protocolVersion": "2.0"
+    }
+
+# Dedicated JSON-RPC endpoint
+@app.post("/jsonrpc")
+async def jsonrpc_specific_endpoint(request: Request):
+    debug_to_stdio("Dedicated JSON-RPC endpoint called")
+    return await jsonrpc_endpoint(request)
+
+# Add alternative API endpoints for API clients
+@app.post("/api/jsonrpc")
+async def api_jsonrpc_endpoint(request: Request):
+    debug_to_stdio("API JSON-RPC endpoint called")
+    return await jsonrpc_endpoint(request)
+
+# Add Smithery-specific endpoints based on conventions
+@app.post("/smithery/jsonrpc")
+@app.post("/smithery/api")
+async def smithery_jsonrpc_endpoint(request: Request):
+    debug_to_stdio("Smithery-specific JSON-RPC endpoint called")
+    return await jsonrpc_endpoint(request)
+
+@app.get("/smithery/info")
+async def smithery_info():
+    debug_to_stdio("Smithery info endpoint called")
+    return {
+        "name": "MCP Firewall",
+        "version": "1.0.0",
+        "description": "Firewall with rules engine for filtering text when using LLMs",
+        "protocolVersion": "2.0",
+        "capabilities": {
+            "toolDiscovery": True,
+            "toolExecution": True
+        },
+        "tools": TOOLS
+    }
+
+@app.get("/smithery/health")
+async def smithery_health():
+    debug_to_stdio("Smithery health endpoint called")
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "protocolVersion": "2.0"
+    }
+
+@app.get("/api/v2")
+@app.post("/api/v2")
+async def api_v2(request: Request):
+    debug_to_stdio("API v2 endpoint called")
+    if request.method == "POST":
+        return await jsonrpc_endpoint(request)
+    return {
+        "name": "MCP Firewall",
+        "version": "1.0.0",
+        "protocolVersion": "2.0",
+        "apiVersion": "2.0",
+        "tools": TOOLS
+    }
+
+# Direct tool execution endpoint for simpler clients
+@app.post("/execute/{tool_name}")
+async def execute_tool(tool_name: str, request: Request):
+    debug_to_stdio(f"Execute endpoint called for tool: {tool_name}")
+    try:
+        body = await request.json()
+        debug_to_stdio(f"Execute request body: {body}")
+        
+        # Check if the tool exists
+        tool_exists = False
+        for tool in TOOLS:
+            if tool["name"] == tool_name:
+                tool_exists = True
+                break
+                
+        if not tool_exists:
+            debug_to_stdio(f"Tool not found: {tool_name}")
+            return {
+                "error": {
+                    "code": -32601,
+                    "message": f"Tool not found: {tool_name}"
+                }
+            }
+        
+        # Process based on tool name
+        if tool_name == "process_text":
+            text = body.get("text", "")
+            result = process_text_impl(text)
+            return result
+            
+        elif tool_name == "get_rules":
+            result = get_rules_impl()
+            return result
+            
+        elif tool_name == "add_rule":
+            result = add_rule_impl(body)
+            return result
+            
+        elif tool_name == "update_rule":
+            rule_id = body.get("rule_id", "")
+            updates = {k: v for k, v in body.items() if k != "rule_id"}
+            result = update_rule_impl(rule_id, updates)
+            return result
+            
+        elif tool_name == "delete_rule":
+            rule_id = body.get("rule_id", "")
+            result = delete_rule_impl(rule_id)
+            return result
+            
+        elif tool_name == "reset_rules":
+            result = reset_rules_impl()
+            return result
+            
+        else:
+            return {
+                "error": {
+                    "code": -32601,
+                    "message": f"Tool not implemented: {tool_name}"
+                }
+            }
+    
+    except Exception as e:
+        debug_to_stdio(f"Error executing tool {tool_name}: {e}")
+        import traceback
+        debug_to_stdio(traceback.format_exc())
+        return {
+            "error": {
+                "code": -32700,
+                "message": f"Execution error: {str(e)}"
+            }
+        }
 
 @app.get("/health")
 async def health():
@@ -505,10 +725,29 @@ async def health():
         rule_count = len(rules)
         return {
             "status": "ok",
+            "name": "MCP Firewall",
             "version": "1.0.0",
             "protocolVersion": "2.0",
             "rule_count": rule_count,
             "rules_loaded": rules_loaded,
+            "endpoints": [
+                "/", 
+                "/api",
+                "/api/v1",
+                "/api/v2",
+                "/tools",
+                "/api/tools",
+                "/jsonrpc",
+                "/api/jsonrpc",
+                "/smithery/jsonrpc",
+                "/smithery/api",
+                "/smithery/info",
+                "/smithery/health",
+                "/execute/{tool_name}",
+                "/health"
+            ],
+            "protocols_supported": ["MCP", "JSON-RPC 2.0"],
+            "tools_supported": [tool["name"] for tool in TOOLS],
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
@@ -516,10 +755,27 @@ async def health():
         return {
             "status": "error",
             "error": str(e),
+            "name": "MCP Firewall",
             "version": "1.0.0",
             "protocolVersion": "2.0",
             "timestamp": datetime.now().isoformat()
         }
+
+# Helper functions for JSON-RPC handling
+def create_jsonrpc_response(result=None, error=None, id="1"):
+    """Create a JSON-RPC 2.0 response"""
+    response = {
+        "jsonrpc": "2.0",
+        "id": id
+    }
+    
+    if result is not None:
+        response["result"] = result
+    
+    if error is not None:
+        response["error"] = error
+    
+    return response
 
 # JSON-RPC endpoint for Smithery
 @app.post("/")
@@ -538,8 +794,9 @@ async def jsonrpc_endpoint(request: Request):
             
             debug_to_stdio(f"JSON-RPC method: {method}")
             
-            # Handle discovery method
-            if method == "discovery" or method == "getServerInfo":
+            # Handle discovery methods - support multiple variations of names 
+            if method in ["discovery", "getServerInfo", "listTools", "getMetadata", "getProtocolInfo"]:
+                debug_to_stdio(f"Handling discovery request with method: {method}")
                 discovery_result = {
                     "protocolVersion": "2.0",
                     "capabilities": {
@@ -551,67 +808,116 @@ async def jsonrpc_endpoint(request: Request):
                         "version": "1.0.0",
                         "description": "Firewall with rules engine for filtering text when using LLMs"
                     },
-                    "tools": [
-                        {
-                            "name": "process_text",
-                            "description": "Process text through the firewall rules engine",
-                            "parameters": {
-                                "text": {
-                                    "type": "string",
-                                    "description": "The text to process"
-                                }
-                            }
-                        },
-                        {
-                            "name": "get_rules",
-                            "description": "Gets all firewall rules",
-                            "parameters": {}
-                        }
-                    ]
+                    "tools": TOOLS
                 }
                 
-                return {
-                    "jsonrpc": jsonrpc_version,
-                    "id": request_id,
-                    "result": discovery_result
+                return create_jsonrpc_response(result=discovery_result, id=request_id)
+            
+            # Handle smithery-specific discovery method by returning full tool list
+            elif method == "smithery.discovery":
+                debug_to_stdio("Handling smithery.discovery request")
+                # Smithery format with protocol version 2.0
+                smithery_result = {
+                    "protocolVersion": "2.0",
+                    "tools": TOOLS,
+                    "name": "MCP Firewall",
+                    "version": "1.0.0",
+                    "description": "Firewall with rules engine for filtering text when using LLMs"
                 }
+                
+                return create_jsonrpc_response(result=smithery_result, id=request_id)
             
             # Handle process_text method
             elif method == "process_text":
                 text = params.get("text", "")
                 result = process_text_impl(text)
-                return {
-                    "jsonrpc": jsonrpc_version,
-                    "id": request_id,
-                    "result": result
-                }
+                return create_jsonrpc_response(result=result, id=request_id)
             
-            # Handle other methods...
+            # Handle get_rules method
+            elif method == "get_rules":
+                result = get_rules_impl()
+                return create_jsonrpc_response(result=result, id=request_id)
+            
+            # Handle other known methods
+            elif method == "add_rule":
+                name = params.get("name", "")
+                pattern = params.get("pattern", "")
+                replacement = params.get("replacement", "<REDACTED>")
+                description = params.get("description", "")
+                enabled = params.get("enabled", True)
+                
+                result = add_rule_impl({
+                    "name": name,
+                    "pattern": pattern,
+                    "replacement": replacement,
+                    "description": description,
+                    "enabled": enabled
+                })
+                
+                return create_jsonrpc_response(result=result, id=request_id)
+            
+            elif method == "update_rule":
+                rule_id = params.get("rule_id", "")
+                updates = {}
+                
+                if "name" in params: updates["name"] = params["name"]
+                if "pattern" in params: updates["pattern"] = params["pattern"]
+                if "replacement" in params: updates["replacement"] = params["replacement"]
+                if "description" in params: updates["description"] = params["description"]
+                if "enabled" in params: updates["enabled"] = params["enabled"]
+                
+                result = update_rule_impl(rule_id, updates)
+                return create_jsonrpc_response(result=result, id=request_id)
+            
+            elif method == "delete_rule":
+                rule_id = params.get("rule_id", "")
+                result = delete_rule_impl(rule_id)
+                return create_jsonrpc_response(result=result, id=request_id)
+            
+            elif method == "reset_rules":
+                result = reset_rules_impl()
+                return create_jsonrpc_response(result=result, id=request_id)
+            
+            # Handle unknown methods
             else:
-                return {
-                    "jsonrpc": jsonrpc_version,
-                    "id": request_id,
-                    "error": {
+                debug_to_stdio(f"Unknown JSON-RPC method: {method}")
+                return create_jsonrpc_response(
+                    error={
                         "code": -32601,
                         "message": f"Method not found: {method}"
-                    }
-                }
+                    },
+                    id=request_id
+                )
         
-        # If it's not a JSON-RPC request, return a default response
+        # If it's not a JSON-RPC request but has a "tools" key, respond with tools list
+        elif "tools" in data:
+            debug_to_stdio("Handling direct tools request")
+            return {
+                "tools": TOOLS,
+                "protocolVersion": "2.0"
+            }
+            
+        # If it's not a JSON-RPC request, try to handle as tool discovery
+        debug_to_stdio("Handling non-JSON-RPC request as tool discovery")
         return {
-            "message": "Invalid JSON-RPC request"
+            "tools": TOOLS,
+            "protocolVersion": "2.0",
+            "name": "MCP Firewall",
+            "version": "1.0.0",
+            "description": "Firewall with rules engine for filtering text when using LLMs"
         }
     
     except Exception as e:
         debug_to_stdio(f"Error processing JSON-RPC request: {e}")
-        return {
-            "jsonrpc": "2.0",
-            "id": "1",
-            "error": {
+        import traceback
+        debug_to_stdio(traceback.format_exc())
+        return create_jsonrpc_response(
+            error={
                 "code": -32700,
                 "message": f"Parse error: {str(e)}"
-            }
-        }
+            },
+            id="1"
+        )
 
 @app.post("/process", response_model=ProcessResponse)
 async def process_endpoint(text_request: TextRequest):

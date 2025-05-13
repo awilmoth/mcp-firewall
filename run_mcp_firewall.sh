@@ -41,6 +41,39 @@ fi
 # Install requirements if needed
 pip install -r requirements.txt
 
+# Check for Smithery SDK
+if ! pip show smithery-sdk &> /dev/null; then
+    echo "Installing Smithery SDK..."
+    pip install git+https://github.com/smithery-ai/sdk.git#subdirectory=python
+fi
+
+# Check Python version - Smithery requires Python 3.10+
+python_version=$($PYTHON --version | awk '{print $2}')
+python_major=$(echo $python_version | cut -d'.' -f1)
+python_minor=$(echo $python_version | cut -d'.' -f2)
+
+if [ "$python_major" -lt 3 ] || ([ "$python_major" -eq 3 ] && [ "$python_minor" -lt 10 ]); then
+    echo "WARNING: Smithery requires Python 3.10 or later. You have Python $python_version."
+    echo "The server may start but might not be compatible with Smithery deployment."
+    echo "Do you want to continue anyway? (y/n)"
+    read answer
+    if [ "$answer" != "y" ]; then
+        echo "Exiting. Please install Python 3.10+ and try again."
+        exit 1
+    fi
+fi
+
 # Run the server
 echo "Starting MCP Firewall server..."
+echo "The server will be available at: http://localhost:6366"
+echo "Health check: http://localhost:6366/health"
+echo "JSON-RPC endpoint: http://localhost:6366/jsonrpc"
+echo "Tools endpoint: http://localhost:6366/tools"
+echo ""
+echo "Press Ctrl+C to stop the server"
+echo ""
+
 $PYTHON app/mcp_firewall.py
+
+# Add trap to catch errors
+trap 'echo "Server exited unexpectedly. Check logs at app/logs/firewall.log"; exit 1' ERR

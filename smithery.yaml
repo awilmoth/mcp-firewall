@@ -7,8 +7,8 @@ startCommand:
   type: http
   command: ["python", "-u", "/app/mcp_firewall.py"]
   port: 6366
-  healthCheckPath: "/health"
-  readinessTimeoutSeconds: 150
+  healthCheckPath: "/smithery/health"
+  readinessTimeoutSeconds: 300
 
 # Environment variables
 env:
