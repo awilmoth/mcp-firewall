@@ -22,6 +22,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("MCPFirewall")
 
+# Debug function for stdout
+def debug_to_stdio(message):
+    """Print debug message to stdout for Docker logs"""
+    print(f"DEBUG: {message}", flush=True)
+    sys.stdout.flush()
+
 # Initialize FastAPI and MCP
 try:
     from fastapi import FastAPI, Request, HTTPException
@@ -296,7 +302,8 @@ try:
         metadata={
             "name": "MCP Firewall",
             "description": "Firewall with rules engine for filtering text when using LLMs",
-            "version": "1.0.0"
+            "version": "1.0.0",
+            "protocolVersion": "2.0"
         }
     )
     debug_to_stdio("Successfully created FastAPI app and MCP server")

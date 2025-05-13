@@ -5,10 +5,13 @@ set -e
 echo "Starting MCP Firewall..."
 
 # Check if Python is installed
-if ! command -v python &> /dev/null; then
+if ! command -v python3 &> /dev/null; then
     echo "Error: Python is not installed. Please install Python first."
     exit 1
 fi
+
+# Use python3 as the Python command
+PYTHON=python3
 
 # Create log and data directories if they don't exist
 mkdir -p app/logs app/data
@@ -22,7 +25,7 @@ fi
 # Check if virtual environment exists, create if it doesn't
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    python -m venv venv
+    $PYTHON -m venv venv
 fi
 
 # Activate virtual environment
@@ -40,4 +43,4 @@ pip install -r requirements.txt
 
 # Run the server
 echo "Starting MCP Firewall server..."
-python app/mcp_firewall.py
+$PYTHON app/mcp_firewall.py

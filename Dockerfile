@@ -3,14 +3,22 @@ FROM python:3.9-slim
 WORKDIR /app
 
 # Create necessary directories
-RUN mkdir -p /app/app
+RUN mkdir -p /app
 
 # Copy only what we need
-COPY app/jsonrpc_discovery_server.py /app/app/
+COPY app/mcp_firewall.py /app/
 COPY smithery.yaml /app/
 
 # Make sure the script is executable
-RUN chmod +x /app/app/jsonrpc_discovery_server.py
+RUN chmod +x /app/mcp_firewall.py
+
+# Create required directories
+RUN mkdir -p /app/logs /app/data
+
+# Install required packages
+RUN pip install fastapi uvicorn pydantic 
+# Install the Smithery SDK
+RUN pip install git+https://github.com/smithery-ai/sdk.git#subdirectory=python
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -21,4 +29,4 @@ ENV LOG_LEVEL=DEBUG
 EXPOSE 6366
 
 # Command to run the server
-CMD ["python", "-u", "/app/app/jsonrpc_discovery_server.py"]
+CMD ["python", "-u", "/app/mcp_firewall.py"]

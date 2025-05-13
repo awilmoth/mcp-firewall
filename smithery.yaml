@@ -2,10 +2,10 @@ version: 1
 name: mcp-firewall
 description: MCP Firewall with rules engine for filtering text when using LLMs
 
-# Start command configuration - using combined JSON-RPC and discovery server
+# Start command configuration - using MCP Firewall server
 startCommand:
   type: http
-  command: ["python", "-u", "/app/app/jsonrpc_discovery_server.py"]
+  command: ["python", "-u", "/app/mcp_firewall.py"]
   port: 6366
   healthCheckPath: "/health"
   readinessTimeoutSeconds: 150
