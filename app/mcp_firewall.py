@@ -881,8 +881,8 @@ async def jsonrpc_endpoint(request: Request):
                 return create_jsonrpc_response(result=discovery_result, id=request_id)
             
             # Handle smithery-specific discovery method by returning full tool list
-            elif method == "smithery.discovery":
-                debug_to_stdio("Handling smithery.discovery request")
+            elif method == "smithery.discovery" or method == "tools/list":
+                debug_to_stdio(f"Handling discovery request with method: {method}")
                 # Smithery format with correct protocol version
                 smithery_result = {
                     "protocolVersion": "2024-11-05",
