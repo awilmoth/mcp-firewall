@@ -428,7 +428,7 @@ try:
             "name": "MCP Firewall",
             "description": "Firewall with rules engine for filtering text when using LLMs",
             "version": "1.0.0",
-            "protocolVersion": "2.0"
+            "protocolVersion": "1.0"
         }
     )
     debug_to_stdio("Successfully created FastAPI app and MCP server")
@@ -543,7 +543,7 @@ async def root():
         "name": "MCP Firewall",
         "version": "1.0.0",
         "description": "Firewall with rules engine for filtering text when using LLMs",
-        "protocolVersion": "2.0"
+        "protocolVersion": "1.0"
     }
 
 @app.get("/api")
@@ -552,7 +552,7 @@ async def api_root():
     return {
         "name": "MCP Firewall", 
         "version": "1.0.0",
-        "protocolVersion": "2.0"
+        "protocolVersion": "1.0"
     }
 
 @app.get("/api/v1")
@@ -561,7 +561,7 @@ async def api_v1():
     return {
         "name": "MCP Firewall", 
         "version": "1.0.0",
-        "protocolVersion": "2.0"
+        "protocolVersion": "1.0"
     }
 
 # Endpoint for Smithery tool scanning
@@ -571,7 +571,7 @@ async def tools_list():
     debug_to_stdio("Tools endpoint called for Smithery scanning")
     return {
         "tools": TOOLS,
-        "protocolVersion": "2.0",
+        "protocolVersion": "1.0",
         "name": "MCP Firewall",
         "version": "1.0.0",
         "description": "Firewall with rules engine for filtering text when using LLMs"
@@ -584,7 +584,7 @@ async def api_tools_list():
     debug_to_stdio("API tools endpoint called")
     return {
         "tools": TOOLS,
-        "protocolVersion": "2.0"
+        "protocolVersion": "1.0"
     }
 
 # Dedicated JSON-RPC endpoint
@@ -613,7 +613,7 @@ async def smithery_info():
         "name": "MCP Firewall",
         "version": "1.0.0",
         "description": "Firewall with rules engine for filtering text when using LLMs",
-        "protocolVersion": "2.0",
+        "protocolVersion": "1.0",
         "capabilities": {
             "toolDiscovery": True,
             "toolExecution": True
@@ -627,7 +627,7 @@ async def smithery_health():
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "protocolVersion": "2.0"
+        "protocolVersion": "1.0"
     }
 
 # CRITICAL: Specifically required for Smithery compatibility
@@ -658,7 +658,7 @@ async def mcp_endpoint(request: Request):
                         "jsonrpc": "2.0",
                         "id": config_json.get("id", "1"),
                         "result": {
-                            "protocolVersion": "2.0",
+                            "protocolVersion": "1.0",
                             "capabilities": {
                                 "toolDiscovery": True,
                                 "toolExecution": True
@@ -679,7 +679,7 @@ async def mcp_endpoint(request: Request):
     if request.method == "GET":
         # Return tool discovery info
         return {
-            "protocolVersion": "2.0",
+            "protocolVersion": "1.0",
             "tools": TOOLS,
             "name": "MCP Firewall",
             "version": "1.0.0",
@@ -705,7 +705,7 @@ async def api_v2(request: Request):
     return {
         "name": "MCP Firewall",
         "version": "1.0.0",
-        "protocolVersion": "2.0",
+        "protocolVersion": "1.0",
         "apiVersion": "2.0",
         "tools": TOOLS
     }
@@ -793,7 +793,7 @@ async def health():
             "status": "ok",
             "name": "MCP Firewall",
             "version": "1.0.0",
-            "protocolVersion": "2.0",
+            "protocolVersion": "1.0",
             "rule_count": rule_count,
             "rules_loaded": rules_loaded,
             "endpoints": [
@@ -824,7 +824,7 @@ async def health():
             "error": str(e),
             "name": "MCP Firewall",
             "version": "1.0.0",
-            "protocolVersion": "2.0",
+            "protocolVersion": "1.0",
             "timestamp": datetime.now().isoformat()
         }
 
@@ -865,7 +865,7 @@ async def jsonrpc_endpoint(request: Request):
             if method in ["discovery", "getServerInfo", "listTools", "getMetadata", "getProtocolInfo"]:
                 debug_to_stdio(f"Handling discovery request with method: {method}")
                 discovery_result = {
-                    "protocolVersion": "2.0",
+                    "protocolVersion": "1.0",
                     "capabilities": {
                         "toolDiscovery": True,
                         "toolExecution": True
@@ -883,9 +883,9 @@ async def jsonrpc_endpoint(request: Request):
             # Handle smithery-specific discovery method by returning full tool list
             elif method == "smithery.discovery":
                 debug_to_stdio("Handling smithery.discovery request")
-                # Smithery format with protocol version 2.0
+                # Smithery format with protocol version 1.0
                 smithery_result = {
-                    "protocolVersion": "2.0",
+                    "protocolVersion": "1.0",
                     "tools": TOOLS,
                     "name": "MCP Firewall",
                     "version": "1.0.0",
@@ -902,7 +902,7 @@ async def jsonrpc_endpoint(request: Request):
                 
                 # Return successful initialization response
                 initialize_result = {
-                    "protocolVersion": "2.0",
+                    "protocolVersion": "1.0",
                     "capabilities": {
                         "toolDiscovery": True,
                         "toolExecution": True
@@ -983,14 +983,14 @@ async def jsonrpc_endpoint(request: Request):
             debug_to_stdio("Handling direct tools request")
             return {
                 "tools": TOOLS,
-                "protocolVersion": "2.0"
+                "protocolVersion": "1.0"
             }
             
         # If it's not a JSON-RPC request, try to handle as tool discovery
         debug_to_stdio("Handling non-JSON-RPC request as tool discovery")
         return {
             "tools": TOOLS,
-            "protocolVersion": "2.0",
+            "protocolVersion": "1.0",
             "name": "MCP Firewall",
             "version": "1.0.0",
             "description": "Firewall with rules engine for filtering text when using LLMs"
