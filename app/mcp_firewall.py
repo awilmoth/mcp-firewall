@@ -294,12 +294,26 @@ TOOLS = [
                 "type": "string",
                 "description": "The text to process"
             }
+        },
+        "inputSchema": {
+            "type": "object",
+            "required": ["text"],
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The text to process"
+                }
+            }
         }
     },
     {
         "name": "get_rules",
         "description": "Gets all firewall rules",
-        "parameters": {}
+        "parameters": {},
+        "inputSchema": {
+            "type": "object",
+            "properties": {}
+        }
     },
     {
         "name": "add_rule",
@@ -325,6 +339,35 @@ TOOLS = [
                 "type": "boolean",
                 "description": "Whether the rule is enabled"
             }
+        },
+        "inputSchema": {
+            "type": "object",
+            "required": ["name", "pattern"],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the rule"
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": "Regex pattern to match"
+                },
+                "replacement": {
+                    "type": "string",
+                    "description": "Text to replace matches with",
+                    "default": "<REDACTED>"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Description of the rule",
+                    "default": ""
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Whether the rule is enabled",
+                    "default": true
+                }
+            }
         }
     },
     {
@@ -334,6 +377,36 @@ TOOLS = [
             "rule_id": {
                 "type": "string",
                 "description": "ID of the rule to update"
+            }
+        },
+        "inputSchema": {
+            "type": "object",
+            "required": ["rule_id"],
+            "properties": {
+                "rule_id": {
+                    "type": "string",
+                    "description": "ID of the rule to update"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "New name for the rule"
+                },
+                "pattern": {
+                    "type": "string",
+                    "description": "New regex pattern"
+                },
+                "replacement": {
+                    "type": "string",
+                    "description": "New replacement text"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "New description"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "New enabled status"
+                }
             }
         }
     },
@@ -345,12 +418,26 @@ TOOLS = [
                 "type": "string",
                 "description": "ID of the rule to delete"
             }
+        },
+        "inputSchema": {
+            "type": "object",
+            "required": ["rule_id"],
+            "properties": {
+                "rule_id": {
+                    "type": "string",
+                    "description": "ID of the rule to delete"
+                }
+            }
         }
     },
     {
         "name": "reset_rules",
         "description": "Resets rules to defaults",
-        "parameters": {}
+        "parameters": {},
+        "inputSchema": {
+            "type": "object",
+            "properties": {}
+        }
     }
 ]
 
