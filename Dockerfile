@@ -8,11 +8,9 @@ RUN mkdir -p /app/logs /app/data
 # Install system dependencies
 RUN apt-get update && apt-get install -y git sqlite3 && apt-get clean
 
-# Copy only requirements first (for better caching)
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies directly
+RUN pip install --no-cache-dir fastapi uvicorn pydantic requests python-dotenv
+RUN pip install --no-cache-dir git+https://github.com/smithery-ai/sdk.git#subdirectory=python
 
 # Copy the rest of the application
 COPY . .
