@@ -91,7 +91,7 @@ To integrate with Claude, configure the `.mcp.json` file to point to the MCP Fir
       "url": "http://localhost:6366",
       "transport": "http",
       "timeout_ms": 60000,
-      "protocol_version": "execute",
+      "protocol_version": "2024-11-05",
       "tools": [
         "process_text",
         "get_rules",

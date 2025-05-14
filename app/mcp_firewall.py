@@ -356,17 +356,29 @@ def add_rule_impl(rule_data: Dict) -> Dict:
     """Add a new rule"""
     ensure_rules_loaded()
     
-    rule_id = rule_data.get("id", f"{rule_data.get('name', 'rule').lower().replace(' ', '_')}_{len(rules)}")
+    # Validate required parameters
+    if not rule_data.get("name") and not rule_data.get("pattern"):
+        logger.error(f"Invalid rule data, missing required fields: {json.dumps(rule_data)}")
+        return {"error": "Missing required fields: name and pattern"}
+    
+    # Generate rule ID from name or a default
+    rule_name = rule_data.get("name", "Custom Rule")
+    rule_id = rule_data.get("id", f"{rule_name.lower().replace(' ', '_')}_{len(rules)}")
     
     # Check if rule with same ID already exists
     if any(r["id"] == rule_id for r in rules):
         rule_id = f"{rule_id}_{len(rules)}"
     
+    # Get pattern - default to an empty string but log a warning
+    pattern = rule_data.get("pattern", "")
+    if not pattern:
+        logger.warning(f"Adding rule with empty pattern: {rule_name}")
+    
     new_rule = {
         "id": rule_id,
-        "name": rule_data.get("name", "Custom Rule"),
+        "name": rule_name,
         "description": rule_data.get("description", ""),
-        "pattern": rule_data.get("pattern", ""),
+        "pattern": pattern,
         "replacement": rule_data.get("replacement", "<REDACTED>"),
         "enabled": rule_data.get("enabled", True),
         "is_regex": rule_data.get("is_regex", True)  # Default to regex for backward compatibility
@@ -778,6 +790,7 @@ async def mcp_endpoint(request: Request):
 async def jsonrpc_endpoint(request: Request):
     try:
         data = await request.json()
+        logger.info(f"JSON-RPC request: {json.dumps(data)}")
         
         # Handle direct tool invocations (no jsonrpc wrapper)
         if "invoke" in data and "name" in data:
@@ -848,18 +861,29 @@ async def jsonrpc_endpoint(request: Request):
             # Handle tools/call method
             elif method == "tools/call":
                 tool_name = params.get("name", "")
-                tool_params = params.get("parameters", {})
+                # Check both parameters and arguments fields
+                if "parameters" in params:
+                    tool_params = params.get("parameters", {})
+                elif "arguments" in params:
+                    tool_params = params.get("arguments", {})
+                else:
+                    tool_params = {}
+                
+                logger.info(f"tools/call method: {tool_name}, params: {json.dumps(tool_params)}")
                 
                 # Execute the appropriate tool
                 if tool_name == "process_text":
                     text = tool_params.get("text", "")
+                    logger.info(f"Processing text: {text[:50]}{'...' if len(text) > 50 else ''}")
                     result = process_text_impl(text)
                     return create_jsonrpc_response(result=result, id=request_id)
                 elif tool_name == "get_rules":
                     result = get_rules_impl()
                     return create_jsonrpc_response(result=result, id=request_id)
                 elif tool_name == "add_rule":
+                    logger.info(f"Adding rule with params: {json.dumps(tool_params)}")
                     result = add_rule_impl(tool_params)
+                    logger.info(f"Add rule result: {json.dumps(result)}")
                     return create_jsonrpc_response(result=result, id=request_id)
                 elif tool_name == "update_rule":
                     rule_id = tool_params.get("rule_id", "")
@@ -901,7 +925,9 @@ async def jsonrpc_endpoint(request: Request):
             # Handle runnable/run method
             elif method == "runnable/run":
                 tool_name = params.get("runnable", {}).get("name", "")
-                tool_input = params.get("input", {})
+                tool_input = params.get("input", {}) or params.get("arguments", {})
+                
+                logger.info(f"runnable/run method: {tool_name}, input: {json.dumps(tool_input)}")
                 
                 # Execute the appropriate tool
                 if tool_name == "process_text":

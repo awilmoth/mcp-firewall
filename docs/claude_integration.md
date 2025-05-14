@@ -37,7 +37,7 @@ Create a `.mcp.json` file in your Claude project directory with the following co
       "url": "http://localhost:6366",
       "transport": "http",
       "timeout_ms": 60000,
-      "protocol_version": "execute",
+      "protocol_version": "2024-11-05",
       "tools": [
         "process_text",
         "get_rules",
