@@ -9,7 +9,7 @@ MCP Firewall acts as a filtering layer with a rules engine that processes text d
 ## Features
 
 - **Powerful Rules Engine** for text processing:
-  - Pattern matching with regular expressions
+  - Pattern matching with regular expressions or plain text
   - Default rules for sensitive information (SSN, Credit Cards, etc.)
   - Customizable replacements and transformations
   - Rule-based policy enforcement
@@ -17,8 +17,11 @@ MCP Firewall acts as a filtering layer with a rules engine that processes text d
 - **REST API** for direct integration with any application
 - **MCP Protocol Support** for seamless integration with Claude and other LLMs
 - **Customizable Rules** that can be added, updated, or deleted via API
-- **Persistent Storage** of rules across restarts
-- **Lightweight Docker Container** for easy deployment
+- **Persistent Storage** of rules across restarts using SQLite database
+- **Enhanced Docker Support**:
+  - Lightweight container with minimal dependencies
+  - Volume mounts for persistent data storage
+  - Easy deployment with the included deploy_docker.sh script
 - **Smithery Compatible** for enterprise deployment
 
 ## Quick Start
@@ -33,8 +36,14 @@ cd mcp-firewall
 # Build the Docker image
 docker build -t mcp-firewall .
 
-# Run the container
-docker run -d -p 6366:6366 --name mcp-firewall mcp-firewall
+# Run the container with persistent storage
+docker run -d -p 6366:6366 \
+  -v $HOME/mcp-firewall-data:/data \
+  -v $HOME/mcp-firewall-logs:/logs \
+  --name mcp-firewall mcp-firewall
+
+# Alternatively, use the deployment script
+./deploy_docker.sh
 
 # Test text processing
 curl -X POST http://localhost:6366/process \
@@ -70,7 +79,7 @@ python app/mcp_firewall.py
 
 - `GET /rules` - Get all firewall rules
 - `POST /rules` - Add a new firewall rule
-  - Request: `{"name": "Rule Name", "pattern": "regex pattern", "replacement": "<REPLACEMENT>", "description": "Description", "enabled": true}`
+  - Request: `{"name": "Rule Name", "pattern": "regex pattern", "replacement": "<REPLACEMENT>", "description": "Description", "enabled": true, "is_regex": true}`
 - `PUT /rules/{rule_id}` - Update a firewall rule
 - `DELETE /rules/{rule_id}` - Delete a firewall rule
 - `POST /rules/reset` - Reset firewall rules to defaults
@@ -114,21 +123,58 @@ MCP Firewall can be deployed to Smithery for enterprise use:
 ./deploy_to_smithery.sh
 ```
 
-## Custom Rules
+## Docker Deployment
 
-You can add custom firewall rules via the API:
+For more control over your Docker deployment, use the included script:
 
 ```bash
-# Add a new rule for AWS keys
+# Deploy with custom settings
+./deploy_docker.sh --port 8080 --data-dir /path/to/data --logs-dir /path/to/logs
+
+# Show all available options
+./deploy_docker.sh --help
+```
+
+## Database Features
+
+MCP Firewall uses SQLite for persistent storage of rules:
+
+- **Automatic Initialization**: Database is created and populated with default rules if not present
+- **Persistent Storage**: Rules survive container restarts when using volume mounts
+- **Database Tools**:
+  - View database info: `GET /db/info`
+  - Run read-only queries: `POST /db/query`
+  - Create backups: `GET /db/backup`
+
+## Custom Rules
+
+You can add custom firewall rules via the API. MCP Firewall supports both regex and plain text pattern matching:
+
+```bash
+# Add a regex rule for AWS keys
 curl -X POST http://localhost:6366/rules \
   -H "Content-Type: application/json" \
   -d '{
     "name": "AWS Key",
     "pattern": "AKIA[0-9A-Z]{16}",
     "replacement": "<AWS_KEY>",
-    "description": "AWS Access Key ID"
+    "description": "AWS Access Key ID",
+    "is_regex": true
+  }'
+
+# Add a plain text rule
+curl -X POST http://localhost:6366/rules \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Company Name",
+    "pattern": "Acme Corporation",
+    "replacement": "<COMPANY>",
+    "description": "Replace company name",
+    "is_regex": false
   }'
 ```
+
+Plain text rules can be more efficient for exact string matches, while regex provides more flexibility for pattern matching.
 
 ## Programmatic Usage
 
@@ -150,13 +196,30 @@ processed = process_text("My credit card is 4111-1111-1111-1111")
 print(processed)  # "My credit card is <CREDIT_CARD>"
 ```
 
+## JSON-RPC Support
+
+MCP Firewall supports the JSON-RPC 2.0 protocol for tool discovery and execution:
+
+```bash
+# List available tools
+curl -X POST http://localhost:6366/ \
+  -H "Content-Type: application/json" \
+  -d '{"method":"tools/list","jsonrpc":"2.0","id":1}'
+
+# Execute a tool
+curl -X POST http://localhost:6366/ \
+  -H "Content-Type: application/json" \
+  -d '{"method":"tools/call","params":{"name":"process_text","arguments":{"text":"Test text"}},"jsonrpc":"2.0","id":2}'
+```
+
 ## Security and Usage Considerations
 
 MCP Firewall provides a flexible rules engine for text processing but has some considerations:
 
-- It relies on regex patterns for matching, which have inherent limitations
+- Support for both regex patterns and plain text matching, each with different performance characteristics
 - The effectiveness depends on the quality and comprehensiveness of your rules
-- Processing very large texts may impact performance
+- Processing very large texts (>100K characters) is limited to prevent timeouts
+- All rules are validated before adding to prevent empty or invalid patterns
 - For security use cases, it should be part of a broader security strategy
 
 ## License
