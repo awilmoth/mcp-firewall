@@ -116,10 +116,17 @@ DEFAULT_RULES = [
 rules = []
 rules_loaded = False
 
-# Database file
-DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+# Database file - use environment variable if provided, otherwise use default path
+DB_PATH = os.environ.get("DB_PATH", None)
+if DB_PATH:
+    DB_FILE = DB_PATH
+    DB_DIR = os.path.dirname(DB_FILE)
+else:
+    DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    DB_FILE = os.path.join(DB_DIR, 'firewall.db')
+
 os.makedirs(DB_DIR, exist_ok=True)
-DB_FILE = os.path.join(DB_DIR, 'firewall.db')
+logger.info(f"Using database at: {DB_FILE}")
 
 def init_db():
     """Initialize the SQLite database"""

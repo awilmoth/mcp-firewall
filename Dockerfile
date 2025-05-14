@@ -9,22 +9,32 @@ COPY . .
 RUN mkdir -p /app/logs /app/data
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y git && apt-get clean
+RUN apt-get update && apt-get install -y git sqlite3 && apt-get clean
 
 # Install Python dependencies
-RUN pip install fastapi uvicorn pydantic mcp
-# Install the Smithery SDK
-RUN pip install git+https://github.com/smithery-ai/sdk.git#subdirectory=python
+RUN pip install -r requirements.txt
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV LOG_LEVEL=DEBUG
+ENV LOG_LEVEL=INFO
 ENV PORT=6366
+ENV DB_PATH=/data/firewall.db
+
+# Create volume mount points
+VOLUME ["/data", "/logs"]
 
 # Expose port
 EXPOSE 6366
 EXPOSE 80
 
+# Entry point script to ensure data directories are properly set up
+RUN echo '#!/bin/bash\n\
+mkdir -p /data /logs\n\
+ln -sf /logs /app/app/logs\n\
+ln -sf /data /app/app/data\n\
+python -u /app/app/mcp_firewall.py\n\
+' > /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
+
 # Command to run the server
-CMD ["python", "-u", "app/mcp_firewall.py"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
