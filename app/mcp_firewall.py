@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import re
+import sqlite3
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -115,40 +116,112 @@ DEFAULT_RULES = [
 rules = []
 rules_loaded = False
 
-# Rule persistence file
-RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'rules.json')
-os.makedirs(os.path.dirname(RULES_FILE), exist_ok=True)
+# Database file
+DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+os.makedirs(DB_DIR, exist_ok=True)
+DB_FILE = os.path.join(DB_DIR, 'firewall.db')
+
+def init_db():
+    """Initialize the SQLite database"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Create rules table if it doesn't exist
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rules (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            pattern TEXT NOT NULL,
+            replacement TEXT,
+            enabled INTEGER NOT NULL,
+            is_regex INTEGER NOT NULL
+        )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
 
 def save_rules():
-    """Save rules to file"""
+    """Save rules to SQLite database"""
     try:
-        with open(RULES_FILE, 'w') as f:
-            json.dump(rules, f, indent=2)
+        init_db()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Clear the existing rules
+        cursor.execute("DELETE FROM rules")
+        
+        # Insert all current rules
+        for rule in rules:
+            cursor.execute(
+                "INSERT INTO rules (id, name, description, pattern, replacement, enabled, is_regex) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    rule["id"],
+                    rule["name"],
+                    rule.get("description", ""),
+                    rule["pattern"],
+                    rule.get("replacement", "<REDACTED>"),
+                    1 if rule.get("enabled", True) else 0,
+                    1 if rule.get("is_regex", True) else 0
+                )
+            )
+        
+        conn.commit()
+        conn.close()
     except Exception as e:
-        logger.error(f"Error saving rules: {e}")
+        logger.error(f"Error saving rules to database: {e}")
 
 def load_rules():
-    """Load rules from file"""
+    """Load rules from SQLite database"""
     global rules, rules_loaded
     
     # Don't reload if already loaded
     if rules_loaded:
         return
-        
-    try:
-        if os.path.exists(RULES_FILE):
-            with open(RULES_FILE, 'r') as f:
-                loaded_rules = json.load(f)
-                if loaded_rules:
-                    rules = loaded_rules
-                    rules_loaded = True
-                    return
-    except Exception as e:
-        logger.error(f"Error loading rules: {e}")
     
-    # If file doesn't exist or there's an error, use default rules
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row  # Use dictionary-like rows
+        cursor = conn.cursor()
+        
+        # Check if any rules exist
+        cursor.execute("SELECT COUNT(*) FROM rules")
+        count = cursor.fetchone()[0]
+        
+        if count > 0:
+            # Load rules from database
+            cursor.execute("SELECT * FROM rules")
+            loaded_rules = []
+            
+            for row in cursor.fetchall():
+                loaded_rules.append({
+                    "id": row["id"],
+                    "name": row["name"],
+                    "description": row["description"],
+                    "pattern": row["pattern"],
+                    "replacement": row["replacement"],
+                    "enabled": bool(row["enabled"]),
+                    "is_regex": bool(row["is_regex"])
+                })
+            
+            if loaded_rules:
+                rules = loaded_rules
+                rules_loaded = True
+                conn.close()
+                return
+        
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error loading rules from database: {e}")
+    
+    # If no rules in database or error, use default rules
     rules = DEFAULT_RULES.copy()
-    save_rules()  # Save default rules
+    save_rules()  # Save default rules to database
     rules_loaded = True
 
 def ensure_rules_loaded():
@@ -973,26 +1046,100 @@ async def reset_rules_direct():
     """Direct access to reset_rules tool."""
     return reset_rules_impl()
 
+# SQLite database utilities
+@app.get("/db/info")
+async def db_info():
+    """Get information about the SQLite database."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Get the list of tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        # Get the count of rules
+        cursor.execute("SELECT COUNT(*) FROM rules")
+        rule_count = cursor.fetchone()[0]
+        
+        # Get the schema
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='rules'")
+        schema = cursor.fetchone()[0]
+        
+        # Get database file size
+        import os
+        db_size = os.path.getsize(DB_FILE) if os.path.exists(DB_FILE) else 0
+        
+        return {
+            "database_file": DB_FILE,
+            "tables": tables,
+            "rule_count": rule_count,
+            "schema": schema,
+            "size_bytes": db_size
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+@app.post("/db/query")
+async def db_query(query_data: dict):
+    """Execute a read-only SQL query on the database."""
+    sql = query_data.get("query", "")
+    
+    # Safety check - only allow SELECT queries
+    sql_lower = sql.lower().strip()
+    if not sql_lower.startswith("select"):
+        return {"error": "Only SELECT queries are allowed"}
+    
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute(sql)
+        results = [dict(row) for row in cursor.fetchall()]
+        
+        return {"results": results, "count": len(results)}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if 'conn' in locals():
+            conn.close()
+            
+@app.get("/db/backup")
+async def db_backup():
+    """Create a backup of the current rules as JSON."""
+    ensure_rules_loaded()
+    
+    try:
+        backup_file = os.path.join(DB_DIR, f"rules_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+        
+        with open(backup_file, 'w') as f:
+            json.dump(rules, f, indent=2)
+            
+        return {
+            "success": True,
+            "backup_file": backup_file,
+            "rule_count": len(rules)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 # Ensure rules are loaded on startup
 def preload_rules():
+    """Preload rules from database at startup"""
     global rules, rules_loaded
     try:
-        # Default to an empty list if loading fails
-        rules = []
-
-        if os.path.exists(RULES_FILE):
-            with open(RULES_FILE, 'r') as f:
-                loaded_rules = json.load(f)
-                if loaded_rules:
-                    rules = loaded_rules
-                    rules_loaded = True
-                    return
-
-        # If no rules file, use default rules
-        rules = DEFAULT_RULES.copy()
-        rules_loaded = True
-    except Exception:
-        # Continue with empty rules if there's an error
+        # Initialize the database
+        init_db()
+        
+        # Load rules
+        load_rules()
+    except Exception as e:
+        logger.error(f"Error preloading rules: {e}")
+        # Default to empty rules if all else fails
         rules = []
         rules_loaded = True
 
