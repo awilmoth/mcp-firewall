@@ -690,12 +690,77 @@ def create_jsonrpc_response(result=None, error=None, id="1"):
     }
     
     if result is not None:
-        response["result"] = result
+        # If Claude format is required, wrap the result with text field
+        if isinstance(result, dict) and "processed_text" in result:
+            # For process_text results, include the formatted string in a text field
+            # This is required for Claude AI Tool Result format
+            formatted_result = {
+                "result": result,
+                "text": f"Processed text: {result['processed_text']}"
+            }
+            response["result"] = formatted_result
+        else:
+            # For other regular results
+            response["result"] = result
     
     if error is not None:
         response["error"] = error
     
     return response
+
+# Helper endpoint specifically for Claude API format
+@app.post("/claude_format")
+async def claude_format_endpoint(request: Request):
+    """Special endpoint that formats responses in the Claude AI Tool Result format"""
+    try:
+        data = await request.json()
+        method = data.get("method", "")
+        params = data.get("params", {})
+        request_id = data.get("id", "1")
+        
+        logger.info(f"Claude format request: {json.dumps(data)}")
+        
+        # Process text method
+        if method == "process_text" or params.get("name") == "process_text":
+            # Extract text from different possible formats
+            text = ""
+            if "text" in params:
+                text = params["text"]
+            elif "arguments" in params and "text" in params["arguments"]:
+                text = params["arguments"]["text"]
+            elif "parameters" in params and "text" in params["parameters"]:
+                text = params["parameters"]["text"]
+            
+            # Process the text
+            result = process_text_impl(text)
+            
+            # Format in Claude's expected format with text field
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "text": f"Processed text: {result['processed_text']}",
+                    "original_result": result
+                }
+            }
+        else:
+            # For other methods, use standard response
+            return create_jsonrpc_response(
+                error={
+                    "code": -32601,
+                    "message": f"Method not supported in Claude format: {method}"
+                },
+                id=request_id
+            )
+    except Exception as e:
+        logger.error(f"Error in Claude format endpoint: {str(e)}")
+        return create_jsonrpc_response(
+            error={
+                "code": -32700,
+                "message": f"Parse error: {str(e)}"
+            },
+            id="1"
+        )
 
 # CRITICAL: Specifically required for Smithery compatibility
 # The /mcp endpoint MUST be available for Smithery deployments
