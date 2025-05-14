@@ -2,17 +2,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy the entire project
-COPY . .
-
 # Create required directories
 RUN mkdir -p /app/logs /app/data
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y git sqlite3 && apt-get clean
 
+# Copy only requirements first (for better caching)
+COPY requirements.txt .
+
 # Install Python dependencies
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application
+COPY . .
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
