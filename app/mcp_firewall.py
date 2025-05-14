@@ -664,6 +664,38 @@ async def jsonrpc_endpoint(request: Request):
     try:
         data = await request.json()
         
+        # Handle direct tool invocations (no jsonrpc wrapper)
+        if "invoke" in data and "name" in data:
+            tool_name = data.get("name", "")
+            tool_params = {}
+            request_id = "direct_invoke"
+            
+            # Execute the appropriate tool
+            if tool_name == "process_text":
+                text = data.get("text", "")
+                result = process_text_impl(text)
+                return result
+            elif tool_name == "get_rules":
+                result = get_rules_impl()
+                return result
+            elif tool_name == "add_rule":
+                result = add_rule_impl(data)
+                return result["rule"] if "rule" in result else result
+            elif tool_name == "update_rule":
+                rule_id = data.get("rule_id", "")
+                updates = {k: v for k, v in data.items() if k != "rule_id" and k != "invoke" and k != "name"}
+                result = update_rule_impl(rule_id, updates)
+                return result["rule"] if "rule" in result else result
+            elif tool_name == "delete_rule":
+                rule_id = data.get("rule_id", "")
+                result = delete_rule_impl(rule_id)
+                return result
+            elif tool_name == "reset_rules":
+                result = reset_rules_impl()
+                return result
+            else:
+                return {"error": f"Unknown tool: {tool_name}"}
+        
         # Check if this is a JSON-RPC request
         if "jsonrpc" in data and "method" in data:
             method = data.get("method", "")
@@ -903,6 +935,43 @@ async def health():
             "version": "1.0.0",
             "protocolVersion": "2024-11-05"
         }
+
+# Direct tool access endpoints
+@app.post("/get_rules")
+async def get_rules_direct():
+    """Direct access to get_rules tool."""
+    return get_rules_impl()
+
+@app.post("/process_text")
+async def process_text_direct(text_request: dict):
+    """Direct access to process_text tool."""
+    text = text_request.get("text", "")
+    return process_text_impl(text)
+
+@app.post("/add_rule")
+async def add_rule_direct(rule_data: dict):
+    """Direct access to add_rule tool."""
+    result = add_rule_impl(rule_data)
+    return result["rule"] if "rule" in result else result
+
+@app.post("/update_rule")
+async def update_rule_direct(update_data: dict):
+    """Direct access to update_rule tool."""
+    rule_id = update_data.get("rule_id", "")
+    updates = {k: v for k, v in update_data.items() if k != "rule_id"}
+    result = update_rule_impl(rule_id, updates)
+    return result["rule"] if "rule" in result else result
+
+@app.post("/delete_rule")
+async def delete_rule_direct(delete_data: dict):
+    """Direct access to delete_rule tool."""
+    rule_id = delete_data.get("rule_id", "")
+    return delete_rule_impl(rule_id)
+
+@app.post("/reset_rules")
+async def reset_rules_direct():
+    """Direct access to reset_rules tool."""
+    return reset_rules_impl()
 
 # Ensure rules are loaded on startup
 def preload_rules():
