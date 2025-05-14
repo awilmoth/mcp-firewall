@@ -4,16 +4,16 @@
       "url": "http://localhost:6366",
       "transport": "http",
       "timeout_ms": 60000,
-      "protocol_version": "execute",
+      "protocol_version": "2024-11-05",
       "tools": [
-        "redact_text",
+        "process_text",
         "get_rules",
         "add_rule",
         "update_rule",
         "delete_rule",
         "reset_rules"
       ],
-      "description": "MCP Firewall service that redacts sensitive information like SSNs, credit cards, and personal data"
+      "description": "MCP Firewall with rules engine for filtering text with sensitive information like SSNs, credit cards, and personal data"
     }
   }
 }
