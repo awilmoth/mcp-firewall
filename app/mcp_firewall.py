@@ -244,59 +244,48 @@ def process_text_impl(text: str) -> Dict:
     if not text:
         return {"processed_text": "", "matches": []}
 
-    processed = text
-    matches = []
-
-    # Apply each rule
-    for rule in rules:
-        if not rule["enabled"]:
-            continue
-
-        try:
-            # Check if this is a regex pattern or plain text
-            is_regex = rule.get("is_regex", True)  # Default to regex for backward compatibility
-            
+    try:
+        # Return quickly for very large inputs to avoid timeouts
+        if len(text) > 100000:  # 100k characters
+            return {
+                "processed_text": text,
+                "matches": [],
+                "warning": "Input text exceeds maximum processing size"
+            }
+        
+        # Make a copy to avoid mutating the input
+        processed = text
+        matches = []
+        
+        # Pre-compile all regex patterns for better performance
+        compiled_rules = []
+        for rule in rules:
+            if not rule["enabled"]:
+                continue
+                
+            is_regex = rule.get("is_regex", True)
             if is_regex:
-                # Process as regex pattern
-                pattern = re.compile(rule["pattern"])
-                rule_matches = list(pattern.finditer(processed))
-                
-                # Process matches in reverse to avoid offset issues
-                for match in reversed(rule_matches):
-                    original = match.group(0)
-                    replacement = rule["replacement"]
-                    
-                    # Add to matches
-                    matches.append({
-                        "original": original,
-                        "replacement": replacement,
-                        "rule_name": rule["name"],
-                        "rule_id": rule["id"]
-                    })
-                    
-                    # Replace in text
-                    start, end = match.span()
-                    processed = processed[:start] + replacement + processed[end:]
+                try:
+                    compiled_pattern = re.compile(rule["pattern"])
+                    compiled_rules.append((rule, compiled_pattern))
+                except re.error:
+                    logger.error(f"Invalid regex pattern in rule {rule['name']}: {rule['pattern']}")
+                    continue
             else:
-                # Process as plain text pattern
-                pattern = rule["pattern"]
-                
-                # Use a simple string replacement for plain text
-                if pattern in processed:
-                    # Find all occurrences
-                    start_idx = 0
-                    plain_matches = []
-                    
-                    while True:
-                        start_idx = processed.find(pattern, start_idx)
-                        if start_idx == -1:
-                            break
-                        plain_matches.append((start_idx, start_idx + len(pattern)))
-                        start_idx += 1
+                compiled_rules.append((rule, None))  # None indicates plain text
+
+        # Process all rules
+        for rule, compiled_pattern in compiled_rules:
+            is_regex = rule.get("is_regex", True)
+            
+            try:
+                if is_regex and compiled_pattern:
+                    # Process as regex pattern - use pre-compiled pattern
+                    rule_matches = list(compiled_pattern.finditer(processed))
                     
                     # Process matches in reverse to avoid offset issues
-                    for start, end in reversed(plain_matches):
-                        original = processed[start:end]
+                    for match in reversed(rule_matches):
+                        original = match.group(0)
                         replacement = rule["replacement"]
                         
                         # Add to matches
@@ -308,14 +297,55 @@ def process_text_impl(text: str) -> Dict:
                         })
                         
                         # Replace in text
+                        start, end = match.span()
                         processed = processed[:start] + replacement + processed[end:]
-        except Exception as e:
-            logger.error(f"Error applying rule {rule['name']}: {e}")
+                else:
+                    # Process as plain text pattern
+                    pattern = rule["pattern"]
+                    
+                    # Optimized string replacement for plain text
+                    if pattern in processed:
+                        # Find all occurrences more efficiently
+                        start_idx = 0
+                        plain_matches = []
+                        
+                        while True:
+                            start_idx = processed.find(pattern, start_idx)
+                            if start_idx == -1:
+                                break
+                            plain_matches.append((start_idx, start_idx + len(pattern)))
+                            start_idx += len(pattern)  # More efficient than +1
+                        
+                        # Process matches in reverse to avoid offset issues
+                        for start, end in reversed(plain_matches):
+                            original = processed[start:end]
+                            replacement = rule["replacement"]
+                            
+                            # Add to matches
+                            matches.append({
+                                "original": original,
+                                "replacement": replacement,
+                                "rule_name": rule["name"],
+                                "rule_id": rule["id"]
+                            })
+                            
+                            # Replace in text
+                            processed = processed[:start] + replacement + processed[end:]
+            except Exception as e:
+                logger.error(f"Error applying rule {rule['name']}: {e}")
+                continue  # Continue with the next rule
 
-    return {
-        "processed_text": processed,
-        "matches": matches
-    }
+        return {
+            "processed_text": processed,
+            "matches": matches
+        }
+    except Exception as e:
+        logger.error(f"Error processing text: {e}")
+        return {
+            "processed_text": text,
+            "matches": [],
+            "error": str(e)
+        }
 
 def get_rules_impl() -> Dict[str, List]:
     """Get all rules"""
@@ -574,6 +604,7 @@ app.add_middleware(
 # MCP server setup
 from mcp.server.fastmcp import FastMCP
 
+# Configure timeouts and other settings for better performance
 mcp_server = FastMCP(
     app=app,
     metadata={
@@ -581,7 +612,11 @@ mcp_server = FastMCP(
         "description": "Firewall with rules engine for filtering text when using LLMs",
         "version": "1.0.0",
         "protocolVersion": "2024-11-05"  # Updated to correct protocol version
-    }
+    },
+    # Increase timeout to avoid client timeouts
+    timeout=60.0,
+    # Add other configuration options
+    enable_metrics=False
 )
 
 # Define MCP tools
