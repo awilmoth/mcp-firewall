@@ -681,8 +681,12 @@ def reset_rules() -> Dict:
     """Reset rules to defaults."""
     return reset_rules_impl()
 
+# Constants for response formats
+RESPONSE_FORMAT_DEFAULT = "default"
+RESPONSE_FORMAT_CLAUDE = "claude"
+
 # Helper function for JSON-RPC responses
-def create_jsonrpc_response(result=None, error=None, id="1"):
+def create_jsonrpc_response(result=None, error=None, id="1", format_type=RESPONSE_FORMAT_DEFAULT):
     """Create a JSON-RPC 2.0 response"""
     response = {
         "jsonrpc": "2.0",
@@ -690,23 +694,70 @@ def create_jsonrpc_response(result=None, error=None, id="1"):
     }
     
     if result is not None:
-        # If Claude format is required, wrap the result with text field
-        if isinstance(result, dict) and "processed_text" in result:
-            # For process_text results, include the formatted string in a text field
-            # This is required for Claude AI Tool Result format
-            formatted_result = {
-                "result": result,
-                "text": f"Processed text: {result['processed_text']}"
-            }
-            response["result"] = formatted_result
+        if format_type == RESPONSE_FORMAT_CLAUDE:
+            # Claude AI Tool Result format requires a text field
+            if isinstance(result, dict):
+                if "processed_text" in result:
+                    # For process_text results
+                    response["result"] = {
+                        "text": f"Processed text: {result['processed_text']}",
+                        "original_result": result
+                    }
+                elif "rule" in result:
+                    # For rule operations
+                    rule_name = result.get("rule", {}).get("name", "rule")
+                    response["result"] = {
+                        "text": f"Rule '{rule_name}' operation completed successfully.",
+                        "original_result": result
+                    }
+                elif "rules" in result:
+                    # For rules listing
+                    num_rules = len(result.get("rules", []))
+                    response["result"] = {
+                        "text": f"Retrieved {num_rules} rules.",
+                        "original_result": result
+                    }
+                else:
+                    # For other operations
+                    response["result"] = {
+                        "text": f"Operation completed successfully.",
+                        "original_result": result
+                    }
+            else:
+                # Non-dict results
+                response["result"] = {
+                    "text": f"Operation completed with result: {result}",
+                    "original_result": result
+                }
         else:
-            # For other regular results
+            # Default format - return the result as is
             response["result"] = result
     
     if error is not None:
         response["error"] = error
     
     return response
+
+# Helper function to determine response format based on request headers/params
+def get_response_format(request):
+    """Determine what response format to use based on request headers or params"""
+    # Check for format in query params
+    format_param = request.query_params.get("format", RESPONSE_FORMAT_DEFAULT)
+    if format_param.lower() == "claude":
+        return RESPONSE_FORMAT_CLAUDE
+    
+    # Check for custom headers
+    response_format = request.headers.get("X-Response-Format", RESPONSE_FORMAT_DEFAULT)
+    if response_format.lower() == "claude":
+        return RESPONSE_FORMAT_CLAUDE
+        
+    # Check for User-Agent containing Claude
+    user_agent = request.headers.get("User-Agent", "").lower()
+    if "claude" in user_agent:
+        return RESPONSE_FORMAT_CLAUDE
+    
+    # Default format
+    return RESPONSE_FORMAT_DEFAULT
 
 # Helper endpoint specifically for Claude API format
 @app.post("/claude_format")
@@ -751,13 +802,13 @@ async def claude_format_endpoint(request: Request):
                     "message": f"Method not supported in Claude format: {method}"
                 },
                 id=request_id
-            )
+            , format_type=response_format)
     except Exception as e:
         logger.error(f"Error in Claude format endpoint: {str(e)}")
         return create_jsonrpc_response(
             error={
                 "code": -32700,
-                "message": f"Parse error: {str(e)}"
+                "message": f"Parse error: {str(e, format_type=response_format)}"
             },
             id="1"
         )
@@ -857,6 +908,9 @@ async def jsonrpc_endpoint(request: Request):
         data = await request.json()
         logger.info(f"JSON-RPC request: {json.dumps(data)}")
         
+        # Determine response format
+        response_format = get_response_format(request)
+        
         # Handle direct tool invocations (no jsonrpc wrapper)
         if "invoke" in data and "name" in data:
             tool_name = data.get("name", "")
@@ -910,7 +964,7 @@ async def jsonrpc_endpoint(request: Request):
                     },
                     "tools": TOOLS
                 }
-                return create_jsonrpc_response(result=discovery_result, id=request_id)
+                return create_jsonrpc_response(result=discovery_result, id=request_id, format_type=response_format)
             
             # Handle tools/list method
             elif method == "smithery.discovery" or method == "tools/list":
@@ -941,27 +995,27 @@ async def jsonrpc_endpoint(request: Request):
                     text = tool_params.get("text", "")
                     logger.info(f"Processing text: {text[:50]}{'...' if len(text) > 50 else ''}")
                     result = process_text_impl(text)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "get_rules":
                     result = get_rules_impl()
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "add_rule":
                     logger.info(f"Adding rule with params: {json.dumps(tool_params)}")
                     result = add_rule_impl(tool_params)
                     logger.info(f"Add rule result: {json.dumps(result)}")
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "update_rule":
                     rule_id = tool_params.get("rule_id", "")
                     updates = {k: v for k, v in tool_params.items() if k != "rule_id"}
                     result = update_rule_impl(rule_id, updates)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "delete_rule":
                     rule_id = tool_params.get("rule_id", "")
                     result = delete_rule_impl(rule_id)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "reset_rules":
                     result = reset_rules_impl()
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 else:
                     return create_jsonrpc_response(
                         error={
@@ -969,7 +1023,7 @@ async def jsonrpc_endpoint(request: Request):
                             "message": f"Unknown tool: {tool_name}"
                         },
                         id=request_id
-                    )
+                    , format_type=response_format)
                 
             # Handle initialize method
             elif method == "initialize":
@@ -985,7 +1039,7 @@ async def jsonrpc_endpoint(request: Request):
                         "description": "Firewall with rules engine for filtering text when using LLMs"
                     }
                 }
-                return create_jsonrpc_response(result=initialize_result, id=request_id)
+                return create_jsonrpc_response(result=initialize_result, id=request_id, format_type=response_format)
             
             # Handle runnable/run method
             elif method == "runnable/run":
@@ -998,25 +1052,25 @@ async def jsonrpc_endpoint(request: Request):
                 if tool_name == "process_text":
                     text = tool_input.get("text", "")
                     result = process_text_impl(text)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "get_rules":
                     result = get_rules_impl()
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "add_rule":
                     result = add_rule_impl(tool_input)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "update_rule":
                     rule_id = tool_input.get("rule_id", "")
                     updates = {k: v for k, v in tool_input.items() if k != "rule_id"}
                     result = update_rule_impl(rule_id, updates)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "delete_rule":
                     rule_id = tool_input.get("rule_id", "")
                     result = delete_rule_impl(rule_id)
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 elif tool_name == "reset_rules":
                     result = reset_rules_impl()
-                    return create_jsonrpc_response(result=result, id=request_id)
+                    return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
                 else:
                     return create_jsonrpc_response(
                         error={
@@ -1024,33 +1078,33 @@ async def jsonrpc_endpoint(request: Request):
                             "message": f"Unknown tool: {tool_name}"
                         },
                         id=request_id
-                    )
+                    , format_type=response_format)
                     
             # Handle process_text method
             elif method == "process_text":
                 text = params.get("text", "")
                 result = process_text_impl(text)
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             
             # Other tool methods
             elif method == "get_rules":
                 result = get_rules_impl()
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             elif method == "add_rule":
                 result = add_rule_impl(params)
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             elif method == "update_rule":
                 rule_id = params.get("rule_id", "")
                 updates = {k: v for k, v in params.items() if k != "rule_id"}
                 result = update_rule_impl(rule_id, updates)
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             elif method == "delete_rule":
                 rule_id = params.get("rule_id", "")
                 result = delete_rule_impl(rule_id)
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             elif method == "reset_rules":
                 result = reset_rules_impl()
-                return create_jsonrpc_response(result=result, id=request_id)
+                return create_jsonrpc_response(result=result, id=request_id, format_type=response_format)
             
             # Handle unknown methods
             else:
@@ -1060,7 +1114,7 @@ async def jsonrpc_endpoint(request: Request):
                         "message": f"Method not found: {method}"
                     },
                     id=request_id
-                )
+                , format_type=response_format)
         
         # Default tool discovery response
         return {
@@ -1075,7 +1129,7 @@ async def jsonrpc_endpoint(request: Request):
         return create_jsonrpc_response(
             error={
                 "code": -32700,
-                "message": f"Parse error: {str(e)}"
+                "message": f"Parse error: {str(e, format_type=response_format)}"
             },
             id="1"
         )
