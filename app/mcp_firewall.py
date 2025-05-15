@@ -246,12 +246,111 @@ def process_text_impl(text: str) -> Dict:
 
     try:
         # Return quickly for very large inputs to avoid timeouts
-        if len(text) > 100000:  # 100k characters
+        if len(text) > 200000:  # 200k characters
             return {
-                "processed_text": text,
+                "processed_text": text[:100] + "... [TEXT TRUNCATED, TOO LARGE TO PROCESS]",
                 "matches": [],
-                "warning": "Input text exceeds maximum processing size"
+                "warning": "Input text exceeds maximum processing size (200K characters)"
             }
+        
+        # For large but processable inputs, limit CPU usage
+        if len(text) > 50000:  # 50k characters
+            # Only apply critical rules to large inputs
+            critical_rule_ids = ["ssn", "cc", "password", "api_key"]
+            filtered_rules = [r for r in rules if r["id"] in critical_rule_ids and r["enabled"]]
+            if filtered_rules:
+                logger.info(f"Processing large text ({len(text)} chars) with limited rule set ({len(filtered_rules)} rules)")
+                # Use filtered rules for processing
+                processed = text
+                matches = []
+                
+                # Pre-compile all regex patterns for better performance
+                compiled_rules = []
+                for rule in filtered_rules:
+                    if not rule["enabled"]:
+                        continue
+                        
+                    is_regex = rule.get("is_regex", True)
+                    if is_regex:
+                        try:
+                            compiled_pattern = re.compile(rule["pattern"])
+                            compiled_rules.append((rule, compiled_pattern))
+                        except re.error:
+                            logger.error(f"Invalid regex pattern in rule {rule['name']}: {rule['pattern']}")
+                            continue
+                    else:
+                        compiled_rules.append((rule, None))  # None indicates plain text
+                
+                # Process all rules - duplicated from main processing logic but faster
+                # for large inputs since we're only using a subset of rules
+                for rule, compiled_pattern in compiled_rules:
+                    # Add timeout check for long-running operations
+                    is_regex = rule.get("is_regex", True)
+                    
+                    try:
+                        if is_regex and compiled_pattern:
+                            # Process as regex pattern - use pre-compiled pattern
+                            rule_matches = list(compiled_pattern.finditer(processed))
+                            
+                            # Process matches in reverse to avoid offset issues
+                            for match in reversed(rule_matches):
+                                original = match.group(0)
+                                replacement = rule["replacement"]
+                                
+                                # Add to matches
+                                matches.append({
+                                    "original": original,
+                                    "replacement": replacement,
+                                    "rule_name": rule["name"],
+                                    "rule_id": rule["id"]
+                                })
+                                
+                                # Replace in text
+                                start, end = match.span()
+                                processed = processed[:start] + replacement + processed[end:]
+                        else:
+                            # Process as plain text pattern
+                            pattern = rule["pattern"]
+                            
+                            # Only process if pattern exists
+                            if pattern and pattern in processed:
+                                # Find all occurrences more efficiently
+                                start_idx = 0
+                                plain_matches = []
+                                
+                                while True:
+                                    start_idx = processed.find(pattern, start_idx)
+                                    if start_idx == -1:
+                                        break
+                                    plain_matches.append((start_idx, start_idx + len(pattern)))
+                                    start_idx += len(pattern)  # More efficient than +1
+                                
+                                # Process matches in reverse to avoid offset issues
+                                for start, end in reversed(plain_matches):
+                                    original = processed[start:end]
+                                    replacement = rule["replacement"]
+                                    
+                                    # Add to matches
+                                    matches.append({
+                                        "original": original,
+                                        "replacement": replacement,
+                                        "rule_name": rule["name"],
+                                        "rule_id": rule["id"]
+                                    })
+                                    
+                                    # Replace in text
+                                    processed = processed[:start] + replacement + processed[end:]
+                    except Exception as e:
+                        logger.error(f"Error applying rule {rule['name']} to large text: {e}")
+                        continue  # Continue with the next rule
+                
+                # Return optimized result
+                return {
+                    "processed_text": processed,
+                    "matches": matches,
+                    "optimized": True,
+                    "rule_count": len(filtered_rules)
+                }
         
         # Make a copy to avoid mutating the input
         processed = text
@@ -625,8 +724,8 @@ mcp_server = FastMCP(
         "version": "1.0.0",
         "protocolVersion": "2024-11-05"  # Updated to correct protocol version
     },
-    # Increase timeout to avoid client timeouts
-    timeout=60.0,
+    # Significantly increase timeout to avoid client timeouts
+    timeout=120.0,
     # Add other configuration options
     enable_metrics=False
 )
@@ -1196,6 +1295,43 @@ async def health():
             "protocolVersion": "2024-11-05"
         }
 
+# Special endpoint for processing large text with minimal timeout risk
+@app.post("/process_large")
+async def process_large_endpoint(text_request: TextRequest):
+    """Process large text with optimized settings to avoid timeouts."""
+    if not text_request.text:
+        return {"processed_text": "", "matches": []}
+    
+    text = text_request.text
+    # Set a hard limit on input size
+    if len(text) > 500000:  # 500k characters
+        return {
+            "processed_text": text[:100] + "... [TEXT TRUNCATED, TOO LARGE TO PROCESS]",
+            "matches": [],
+            "error": "Input exceeds absolute maximum size (500K characters)"
+        }
+    
+    # Apply only critical rules to improve performance
+    critical_rule_ids = ["ssn", "cc", "password", "api_key"]
+    global rules
+    original_rules = rules.copy()
+    
+    # Filter to critical rules only
+    filtered_rules = [r for r in original_rules if r["id"] in critical_rule_ids and r["enabled"]]
+    rules = filtered_rules
+    
+    # Process with optimized rules
+    result = process_text_impl(text)
+    
+    # Restore original rules
+    rules = original_rules
+    
+    # Add metadata to the result
+    result["optimized"] = True
+    result["rules_applied"] = len(filtered_rules)
+    
+    return result
+
 # Direct tool access endpoints
 @app.post("/get_rules")
 async def get_rules_direct():
@@ -1342,11 +1478,17 @@ if __name__ == "__main__":
     # Preload rules
     preload_rules()
 
-    # Run server
+    # Run server with optimized settings
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=port,
         timeout_keep_alive=120,
-        workers=1
+        workers=1,
+        # Increase timeouts to avoid MCP client timeouts
+        timeout_graceful_shutdown=30,
+        limit_concurrency=100,
+        # Increase these limits for large requests
+        limit_max_requests=0,
+        backlog=2048
     )
